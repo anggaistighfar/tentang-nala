@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Temporary camera captures; compressed copies move to filesDir/media. -->
+    <cache-path name="captures" path="captures/" />
+</paths>
