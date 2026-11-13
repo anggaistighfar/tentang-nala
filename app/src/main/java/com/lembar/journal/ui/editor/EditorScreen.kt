@@ -177,6 +177,7 @@ fun EditorScreen(stylusOnly: Boolean, onExit: () -> Unit) {
     }
 
     s.reward?.let { RewardDialog(it, onDismiss = vm::dismissReward) }
+    if (s.support) com.lembar.journal.ui.insight.SupportDialog(onDismiss = vm::dismissSupport)
 }
 
 @Composable

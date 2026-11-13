@@ -6,14 +6,14 @@ Dioptimalkan untuk Samsung Galaxy S25 Ultra dan S Pen. Berjalan di Android 8.0 k
 
 ## ⬇️ Download
 
-**[Download APK terbaru](https://github.com/anggaistighfar/tentang-nala/releases/latest/download/TentangNala-v1.0.0.apk)** (±3 MB)
+**[Download APK terbaru](https://github.com/anggaistighfar/tentang-nala/releases/latest/download/TentangNala.apk)** (±3 MB)
 
 Atau buka halaman [Releases](https://github.com/anggaistighfar/tentang-nala/releases).
 
 ### Cara pasang di HP
 
 1. Buka link download di atas dari browser HP (Chrome atau Samsung Internet).
-2. Setelah selesai, ketuk file `TentangNala-v1.0.0.apk`.
+2. Setelah selesai, ketuk file `TentangNala.apk`.
 3. Kalau muncul peringatan, ketuk **Pengaturan** lalu aktifkan **Izinkan dari sumber ini**, kembali, lalu ketuk **Instal**.
 4. Kalau Play Protect bertanya, pilih **Tetap instal**. Peringatan ini muncul karena aplikasi belum ada di Play Store.
 
@@ -32,6 +32,26 @@ Atau buka halaman [Releases](https://github.com/anggaistighfar/tentang-nala/rele
 | Hemat penyimpanan | Foto dikompres ke WebP (biasanya puluhan sampai ratusan KB), sketsa ±10 KB |
 | S Pen | Tekanan mengatur tebal garis, tombol S Pen untuk menghapus, telapak tangan diabaikan |
 | Tema | Kertas (terang) dan Malam (gelap) |
+| Analisis Nala | Analisis pola mood dengan pendekatan psikologi, plus saran yang bisa dilakukan (lihat di bawah) |
+
+## Analisis Nala
+
+Halaman **Analisis Nala** (dari Beranda atau Statistik) membaca jurnal 7, 30, atau 90 hari terakhir dan menunjukkan:
+
+- **Ringkasan mood**: rata-rata, tren dibanding periode sebelumnya, naik-turunnya mood, grafik per hari.
+- **Emosi yang paling sering muncul** dan keseimbangan emosi positif dan negatif.
+- **Apa yang memengaruhi mood-mu**: topik dan aktivitas di tulisanmu (pekerjaan, keluarga, tidur, olahraga, teman, dll.) beserta rata-rata mood saat topik itu muncul.
+- **Pola pikir yang perlu dicermati**, dari teknik CBT: memberi label buruk pada diri, generalisasi berlebihan, membayangkan yang terburuk, tuntutan "harusnya", menebak isi pikiran orang. Disertai kutipan dari tulisanmu dan pertanyaan untuk menguji pikiran itu.
+- **Yang bisa kamu lakukan**: latihan langkah demi langkah sesuai polamu (catatan pikiran, grounding, aktivasi perilaku, welas asih diri, kebiasaan tidur, menghubungi orang lain, waktu khawatir, tiga hal baik). Tombol "Coba tulis sekarang" membuka jurnal dengan panduan latihannya.
+- **Ringkasan untuk psikolog**: angka mood, emosi, topik, dan pola dalam bentuk teks yang bisa dibagikan ke psikolog atau konselor. Isi tulisan jurnal tidak ikut dibagikan.
+
+Setiap catatan juga mendapat **Catatan dari Nala**: tanggapan singkat dan satu saran.
+
+**Keselamatan.** Kalau tulisan menyebut keinginan untuk mati atau menyakiti diri, aplikasi tidak menampilkan pop-up XP. Yang muncul adalah kartu bantuan dengan **Healing119 Kemenkes (telepon 119, ekstensi 8, gratis)** dan chat di **healing119.id**. Kalau mood rendah bertahan sekitar dua minggu, aplikasi menyarankan bicara dengan psikolog.
+
+Analisis berjalan sepenuhnya di HP dengan aturan yang bisa dibaca di [`Insights.kt`](app/src/main/java/com/lembar/journal/domain/Insights.kt) dan [`Lexicon.kt`](app/src/main/java/com/lembar/journal/domain/Lexicon.kt). Tidak ada data yang dikirim ke internet. Isi jurnal terkunci hanya ikut dianalisis kalau kamu membukanya dengan sidik jari/PIN di halaman itu.
+
+> Analisis ini otomatis dan **bukan diagnosis atau pengganti psikolog**. Kalau perasaanmu terasa berat atau berlangsung lama, bicaralah dengan tenaga profesional.
 
 ## Privasi
 
@@ -64,7 +84,7 @@ Tanpa file itu, build rilis memakai debug key.
 ```
 app/src/main/java/com/lembar/journal/
   data/        Room DB, enkripsi, penyimpanan foto, pengaturan
-  domain/      Mood & emosi, aturan XP, pancingan menulis
+  domain/      Mood & emosi, aturan XP, pancingan menulis, analisis (Insights, Lexicon)
   reminder/    Alarm & notifikasi harian
   security/    Biometrik / PIN
   ui/          Tema, komponen, layar

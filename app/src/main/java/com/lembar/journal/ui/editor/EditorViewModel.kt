@@ -11,6 +11,7 @@ import com.lembar.journal.data.EntryDraft
 import com.lembar.journal.data.JournalRepository
 import com.lembar.journal.data.MediaKind
 import com.lembar.journal.domain.LevelInfo
+import com.lembar.journal.domain.Lexicon
 import com.lembar.journal.domain.Mood
 import com.lembar.journal.domain.Prompts
 import com.lembar.journal.domain.XpItem
@@ -55,6 +56,8 @@ data class EditorState(
     val dirty: Boolean = false,
     val saving: Boolean = false,
     val reward: Reward? = null,
+    /** Entry mentioned suicide/self-harm: show support resources before anything else. */
+    val support: Boolean = false,
     val finished: Boolean = false,
     val message: String? = null,
 ) {
@@ -238,13 +241,21 @@ class EditorViewModel(private val c: AppContainer, handle: SavedStateHandle) : V
                     streak = after.currentStreak,
                 )
             } else null
+            val support = Lexicon.hasCrisis("${s.title}\n${s.body}")
             _state.update {
-                it.copy(saving = false, dirty = false, reward = reward, finished = reward == null)
+                it.copy(
+                    saving = false, dirty = false,
+                    // A cheerful XP popup right after a crisis entry would feel dismissive.
+                    reward = if (support) null else reward,
+                    support = support,
+                    finished = !support && reward == null,
+                )
             }
         }
     }
 
     fun dismissReward() = _state.update { it.copy(reward = null, finished = true) }
+    fun dismissSupport() = _state.update { it.copy(support = false, finished = true) }
 
     /** Called when the user leaves without saving: throw away files written for this draft. */
     fun discard() {

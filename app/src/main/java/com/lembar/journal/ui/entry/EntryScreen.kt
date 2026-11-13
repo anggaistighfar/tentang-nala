@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material3.AlertDialog
@@ -73,8 +74,13 @@ import com.lembar.journal.ui.LocalAuthenticator
 import com.lembar.journal.ui.components.IconAction
 import com.lembar.journal.ui.components.MediaImage
 import com.lembar.journal.ui.components.MoodFace
+import com.lembar.journal.domain.EntryReflection
+import com.lembar.journal.domain.InsightEngine
 import com.lembar.journal.ui.components.PrimaryButton
+import com.lembar.journal.ui.components.SecondaryButton
 import com.lembar.journal.ui.components.Tag
+import com.lembar.journal.ui.insight.SupportCard
+import com.lembar.journal.ui.insight.toInsight
 import com.lembar.journal.ui.components.TopBar
 import com.lembar.journal.ui.lembarViewModel
 import com.lembar.journal.ui.theme.JournalFonts
@@ -100,7 +106,7 @@ class EntryViewModel(private val c: AppContainer, handle: SavedStateHandle) : Vi
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun EntryScreen(onBack: () -> Unit, onEdit: (Long) -> Unit) {
+fun EntryScreen(onBack: () -> Unit, onEdit: (Long) -> Unit, onPrompt: (String) -> Unit) {
     val vm = lembarViewModel { c, h -> EntryViewModel(c, h) }
     val entry by vm.entry.collectAsStateWithLifecycle()
     val unlocked by vm.unlocked.collectAsStateWithLifecycle()
@@ -239,6 +245,11 @@ fun EntryScreen(onBack: () -> Unit, onEdit: (Long) -> Unit) {
                     }
                 }
             }
+            Spacer(Modifier.height(24.dp))
+            val reflection = remember(e.id, e.updatedAt, title, body) {
+                InsightEngine.reflect(e.toInsight("$title\n$body"))
+            }
+            ReflectionCard(reflection, onPrompt)
             Spacer(Modifier.height(16.dp))
             if (e.updatedAt - e.createdAt > 60_000) {
                 Text("Terakhir diubah ${Fmt.short(java.time.Instant.ofEpochMilli(e.updatedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate())}, ${Fmt.time(e.updatedAt)}", style = t.caption)
@@ -258,6 +269,56 @@ fun EntryScreen(onBack: () -> Unit, onEdit: (Long) -> Unit) {
     }
 
     viewing?.let { ImageViewer(it) { viewing = null } }
+}
+
+/** "Catatan dari Nala": a short, gentle reflection on this entry. */
+@Composable
+private fun ReflectionCard(r: EntryReflection, onPrompt: (String) -> Unit) {
+    val c = Lembar.colors
+    val t = Lembar.type
+    if (r.crisis) {
+        SupportCard(singleEntry = true)
+        return
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(c.surface)
+            .padding(18.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Psychology, null, tint = c.accent, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Catatan dari Nala", style = t.label)
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(r.validation, style = t.body)
+        r.distortion?.let { d ->
+            Spacer(Modifier.height(14.dp))
+            Text(d.distortion.name, style = t.label)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "“${d.example}”",
+                style = t.bodySmall.copy(color = c.ink),
+                modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(c.surfaceAlt).padding(10.dp),
+            )
+            Spacer(Modifier.height(6.dp))
+            Text("${d.distortion.explain} ${d.distortion.reframe}", style = t.bodySmall)
+        }
+        r.suggestion?.let { s ->
+            Spacer(Modifier.height(14.dp))
+            Text("Saran: ${s.title}", style = t.label)
+            Spacer(Modifier.height(4.dp))
+            Text(s.steps.first(), style = t.bodySmall)
+            if (s.prompt != null) {
+                Spacer(Modifier.height(10.dp))
+                SecondaryButton("Coba tulis sekarang", { onPrompt(s.prompt) }, Modifier.fillMaxWidth())
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text("Refleksi otomatis, bukan diagnosis.", style = t.caption)
+    }
 }
 
 /** Full-screen pinch-to-zoom viewer. */

@@ -41,6 +41,7 @@ import com.lembar.journal.ui.components.SectionHeader
 import com.lembar.journal.ui.components.SurfaceCard
 import com.lembar.journal.ui.components.WeekStrip
 import com.lembar.journal.ui.components.XpCard
+import com.lembar.journal.ui.insight.InsightEntryCard
 import com.lembar.journal.ui.theme.Lembar
 import java.time.LocalDate
 import java.time.LocalTime
@@ -56,6 +57,7 @@ fun HomeScreen(
     onOpen: (Long) -> Unit,
     onReflection: (String) -> Unit,
     onProgress: () -> Unit,
+    onInsight: () -> Unit,
 ) {
     val c = Lembar.colors
     val t = Lembar.type
@@ -131,6 +133,8 @@ fun HomeScreen(
 
         item {
             XpCard(progress.level, progress.currentStreak, onProgress, Modifier.padding(horizontal = 20.dp))
+            Spacer(Modifier.height(10.dp))
+            InsightEntryCard(onInsight, Modifier.padding(horizontal = 20.dp))
             Spacer(Modifier.height(28.dp))
         }
 

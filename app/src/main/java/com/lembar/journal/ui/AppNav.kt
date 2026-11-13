@@ -58,6 +58,7 @@ import com.lembar.journal.ui.components.PrimaryButton
 import com.lembar.journal.ui.editor.EditorScreen
 import com.lembar.journal.ui.entry.EntryScreen
 import com.lembar.journal.ui.home.HomeScreen
+import com.lembar.journal.ui.insight.InsightScreen
 import com.lembar.journal.ui.onboarding.OnboardingScreen
 import com.lembar.journal.ui.settings.SettingsScreen
 import com.lembar.journal.ui.stats.StatsScreen
@@ -70,6 +71,7 @@ object Routes {
     const val MAIN = "main"
     const val WRITE = "write?entryId={entryId}&date={date}&prompt={prompt}&checkin={checkin}"
     const val ENTRY = "entry/{id}"
+    const val INSIGHT = "insight"
 
     fun write(date: LocalDate? = null, entryId: Long? = null, prompt: String? = null, checkin: Boolean = true): String {
         val parts = buildList {
@@ -119,6 +121,14 @@ fun AppNav(appVm: AppViewModel, settings: Settings, openCheckin: MutableStateFlo
                 settings = settings,
                 onWrite = { date, prompt -> nav.navigate(Routes.write(date, prompt = prompt, checkin = prompt == null)) },
                 onOpen = { nav.navigate(Routes.entry(it)) },
+                onInsight = { nav.navigate(Routes.INSIGHT) { launchSingleTop = true } },
+            )
+        }
+        composable(Routes.INSIGHT) { entry ->
+            InsightScreen(
+                onBack = { nav.popFrom(entry) },
+                // Guided exercises still start with a mood check-in, so the analysis keeps learning.
+                onPrompt = { nav.navigate(Routes.write(LocalDate.now(), prompt = it, checkin = true)) },
             )
         }
         composable(
@@ -131,6 +141,7 @@ fun AppNav(appVm: AppViewModel, settings: Settings, openCheckin: MutableStateFlo
             EntryScreen(
                 onBack = { nav.popFrom(entry) },
                 onEdit = { id -> nav.navigate(Routes.write(entryId = id, checkin = false)) },
+                onPrompt = { nav.navigate(Routes.write(LocalDate.now(), prompt = it, checkin = true)) },
             )
         }
     }
@@ -151,6 +162,7 @@ private fun MainTabs(
     settings: Settings,
     onWrite: (LocalDate, String?) -> Unit,
     onOpen: (Long) -> Unit,
+    onInsight: () -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val entries by appVm.entries.collectAsStateWithLifecycle()
@@ -171,9 +183,10 @@ private fun MainTabs(
                 onOpen = onOpen,
                 onReflection = { onWrite(today, it) },
                 onProgress = { tab = 2 },
+                onInsight = onInsight,
             )
             1 -> ArchiveScreen(entries, padding, onOpen)
-            2 -> StatsScreen(entries, progress, today, padding)
+            2 -> StatsScreen(entries, progress, today, padding, onInsight)
             else -> SettingsScreen(appVm, settings, padding)
         }
         BottomBar(

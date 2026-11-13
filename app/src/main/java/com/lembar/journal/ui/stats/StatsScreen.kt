@@ -73,7 +73,7 @@ private enum class Range(val label: String) { Week("Minggu"), Month("Bulan"), Ye
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun StatsScreen(entries: List<JournalEntry>, progress: Progress, today: LocalDate, contentPadding: PaddingValues) {
+fun StatsScreen(entries: List<JournalEntry>, progress: Progress, today: LocalDate, contentPadding: PaddingValues, onInsight: () -> Unit) {
     val c = Lembar.colors
     val t = Lembar.type
     var range by rememberSaveable { mutableIntStateOf(Range.Month.ordinal) }
@@ -100,6 +100,8 @@ fun StatsScreen(entries: List<JournalEntry>, progress: Progress, today: LocalDat
         Column(Modifier.padding(horizontal = 20.dp)) {
             Spacer(Modifier.height(16.dp))
             Text("Mood", style = t.display)
+            Spacer(Modifier.height(14.dp))
+            com.lembar.journal.ui.insight.InsightEntryCard(onInsight)
             Spacer(Modifier.height(16.dp))
             Segmented(Range.entries.map { it.label }, range, { range = it })
             Spacer(Modifier.height(14.dp))
