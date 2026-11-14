@@ -21,7 +21,9 @@ Atau buka halaman [Releases](https://github.com/anggaistighfar/tentang-nala/rele
 
 | | |
 |---|---|
-| Catatan bebas | Judul + isi, pancingan menulis sesuai mood, hitungan kata |
+| Catatan bebas | Judul + isi, pancingan menulis sesuai mood, hitungan kata; halaman ikut turun otomatis saat mengetik |
+| Format teks | Judul, subjudul, daftar bernomor dan daftar poin (tombol atau ketik `1. ` / `- `; Enter melanjutkan, Enter di baris kosong mengakhiri), rata kiri/tengah/kanan/kiri-kanan, tombol **Rapikan** |
+| Tulis langsung dengan S Pen | Mode pena: tulis tangan langsung di halaman jurnal seperti Samsung Notes; jari tetap menggeser halaman |
 | Mood | 5 wajah mood + pilihan emosi (bisa tambah sendiri) |
 | Pengingat harian | Jam bebas; tidak muncul kalau kamu sudah menulis hari itu |
 | Foto & sketsa | Kamera, galeri, atau gambar dengan S Pen |
@@ -30,7 +32,7 @@ Atau buka halaman [Releases](https://github.com/anggaistighfar/tentang-nala/rele
 | Kunci jurnal | Isi tulisan dienkripsi (AES-256), dibuka dengan sidik jari/wajah/PIN; opsi kunci seluruh aplikasi |
 | Font per jurnal | Lora, Space Grotesk, Nunito, Caveat, Courier Prime, DM Serif, font sistem |
 | Hemat penyimpanan | Foto dikompres ke WebP (biasanya puluhan sampai ratusan KB), sketsa ±10 KB |
-| S Pen | Tekanan mengatur tebal garis, tombol S Pen untuk menghapus, telapak tangan diabaikan |
+| S Pen | Tekanan mengatur tebal garis, tahan tombol S Pen untuk menghapus, telapak tangan diabaikan, pratinjau saat pena melayang |
 | Tema | Kertas (terang) dan Malam (gelap) |
 | Analisis Nala | Analisis pola mood dengan pendekatan psikologi, plus saran yang bisa dilakukan (lihat di bawah) |
 

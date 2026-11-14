@@ -1,5 +1,6 @@
 package com.lembar.journal.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -29,6 +30,10 @@ data class EntryEntity(
     val fontKey: String,
     val locked: Boolean,
     val wordCount: Int,
+    /** Handwriting on the page (InkCodec, encrypted like the text when locked). Added in DB v2. */
+    @ColumnInfo(defaultValue = "") val ink: String = "",
+    /** Paragraph alignment key (BodyAlign). Added in DB v2. */
+    @ColumnInfo(defaultValue = "start") val align: String = "start",
 )
 
 @Entity(

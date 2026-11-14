@@ -58,7 +58,7 @@ fun SupportCard(modifier: Modifier = Modifier, compact: Boolean = false, singleE
         )
         Spacer(Modifier.height(14.dp))
         PrimaryButton(
-            "Telepon 119, lalu pilih ekstensi 8",
+            "Telepon 119 (ekstensi 8)",
             onClick = { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Crisis.PHONE}"))) },
             modifier = Modifier.fillMaxWidth(),
             icon = Icons.Outlined.Call,

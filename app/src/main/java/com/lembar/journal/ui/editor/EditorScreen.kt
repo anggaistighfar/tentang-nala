@@ -11,6 +11,28 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.material.icons.automirrored.outlined.FormatAlignLeft
+import androidx.compose.material.icons.automirrored.outlined.FormatAlignRight
+import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
+import androidx.compose.material.icons.outlined.AutoFixHigh
+import androidx.compose.material.icons.outlined.FormatAlignCenter
+import androidx.compose.material.icons.outlined.FormatAlignJustify
+import androidx.compose.material.icons.outlined.FormatListNumbered
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
+import com.lembar.journal.domain.Markup
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -120,6 +142,12 @@ fun EditorScreen(stylusOnly: Boolean, onExit: () -> Unit) {
     LaunchedEffect(s.message) {
         s.message?.let { snackbar.showSnackbar(it); vm.consumeMessage() }
     }
+    LaunchedEffect(s.tidyUndo != null) {
+        if (s.tidyUndo != null) {
+            val r = snackbar.showSnackbar("Tulisan dirapikan", actionLabel = "Urungkan", duration = SnackbarDuration.Long)
+            if (r == SnackbarResult.ActionPerformed) vm.undoTidy() else vm.clearTidyUndo()
+        }
+    }
     LaunchedEffect(s.needsUnlock) {
         if (s.needsUnlock) {
             auth.authenticate("Buka jurnal", "Jurnal ini terkunci", onSuccess = vm::onUnlocked, onFailure = { onExit() })
@@ -163,7 +191,8 @@ fun EditorScreen(stylusOnly: Boolean, onExit: () -> Unit) {
                 }
             }
         }
-        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().imePadding().padding(bottom = 72.dp))
+        // Top of the screen: at the bottom it would cover the line being written.
+        SnackbarHost(snackbar, Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 60.dp))
     }
 
     if (confirmDiscard) {
@@ -333,6 +362,8 @@ private fun WriteStep(s: EditorState, vm: EditorViewModel, stylusOnly: Boolean, 
     var showFonts by remember { mutableStateOf(false) }
     var showSketch by remember { mutableStateOf(false) }
     var capturePath by rememberSaveable { mutableStateOf<String?>(null) }
+    val scroll = rememberScrollState()
+    val focus = LocalFocusManager.current
 
     val pickPhotos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(6)) { uris ->
         if (uris.isNotEmpty()) vm.addPhotos(uris)
@@ -353,10 +384,10 @@ private fun WriteStep(s: EditorState, vm: EditorViewModel, stylusOnly: Boolean, 
             backIcon = Icons.Rounded.Close,
         ) {
             PillButton(if (s.saving) "Menyimpan" else "Simpan", onClick = vm::save, enabled = s.canSave)
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(14.dp))
         }
 
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(scroll).padding(horizontal = 22.dp)) {
             // Mood + emotions summary; tap to revisit the check-in.
             Row(
                 Modifier
@@ -390,19 +421,8 @@ private fun WriteStep(s: EditorState, vm: EditorViewModel, stylusOnly: Boolean, 
                 },
             )
             Spacer(Modifier.height(12.dp))
-            BasicTextField(
-                value = s.body,
-                onValueChange = vm::setBody,
-                textStyle = font.bodyStyle(c.ink),
-                cursorBrush = SolidColor(c.accent),
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                modifier = Modifier.fillMaxWidth().heightIn(min = 220.dp),
-                decorationBox = { inner ->
-                    if (s.body.isEmpty()) Text(s.prompt, style = font.bodyStyle(c.inkFaint))
-                    inner()
-                },
-            )
-            if (s.body.isEmpty()) {
+            BodyPage(s, vm, stylusOnly, font, scroll)
+            if (s.body.isEmpty() && s.ink.isEmpty() && !s.penMode) {
                 Row(
                     Modifier.clip(RoundedCornerShape(8.dp)).clickable { vm.nextPrompt() }.padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -420,12 +440,27 @@ private fun WriteStep(s: EditorState, vm: EditorViewModel, stylusOnly: Boolean, 
             Spacer(Modifier.height(24.dp))
         }
 
+        Box(Modifier.fillMaxWidth().height(1.dp).background(c.border.copy(alpha = 0.6f)))
+        if (s.penMode) {
+            PenBar(
+                pen = s.pen,
+                onChange = vm::setPen,
+                canUndo = s.canUndoInk,
+                canRedo = s.canRedoInk,
+                onUndo = vm::undoInk,
+                onRedo = vm::redoInk,
+                modifier = Modifier.background(c.background),
+            )
+        } else {
+            FormatBar(s, vm)
+        }
+
         // Bottom toolbar (design 2 note toolbar)
         Row(
             Modifier
                 .fillMaxWidth()
                 .background(c.background)
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconAction(Icons.Outlined.PhotoCamera, "Kamera", {
@@ -437,7 +472,16 @@ private fun WriteStep(s: EditorState, vm: EditorViewModel, stylusOnly: Boolean, 
             IconAction(Icons.Outlined.PhotoLibrary, "Galeri", {
                 pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             })
-            IconAction(Icons.Outlined.Draw, "Sketsa S Pen", { showSketch = true })
+            IconAction(Icons.Outlined.Palette, "Sketsa terpisah", { showSketch = true })
+            IconAction(
+                Icons.Outlined.Draw, if (s.penMode) "Kembali mengetik" else "Tulis dengan S Pen",
+                {
+                    if (!s.penMode) focus.clearFocus()
+                    vm.setPenMode(!s.penMode)
+                },
+                tint = if (s.penMode) c.onPrimary else c.ink,
+                background = if (s.penMode) c.primary else Color.Transparent,
+            )
             IconAction(Icons.Outlined.TextFields, "Font", { showFonts = true })
             IconAction(
                 if (s.locked) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
@@ -455,7 +499,7 @@ private fun WriteStep(s: EditorState, vm: EditorViewModel, stylusOnly: Boolean, 
                 background = if (s.locked) c.primary else Color.Transparent,
             )
             Spacer(Modifier.weight(1f))
-            Text("${s.wordCount} kata", style = t.caption, modifier = Modifier.padding(end = 8.dp))
+            Text("${s.wordCount} kata", style = t.caption, modifier = Modifier.padding(end = 10.dp))
         }
     }
 
@@ -595,4 +639,161 @@ private fun RewardDialog(reward: Reward, onDismiss: () -> Unit) {
             PrimaryButton("lanjut", onDismiss, Modifier.fillMaxWidth())
         }
     }
+}
+
+/**
+ * The writing page: formatted text with a handwriting layer on top.
+ * While typing, the page scrolls itself so the cursor stays just above the
+ * keyboard, including after Enter adds a new line.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun BodyPage(
+    s: EditorState,
+    vm: EditorViewModel,
+    stylusOnly: Boolean,
+    font: com.lembar.journal.ui.theme.JournalFont,
+    scroll: androidx.compose.foundation.ScrollState,
+) {
+    val c = Lembar.colors
+    val density = LocalDensity.current
+    val baseStyle = font.bodyStyle(c.ink)
+    val transformation = remember(baseStyle, c.accent) { MarkupTransformation(baseStyle, c.accent) }
+    val bringer = remember { BringIntoViewRequester() }
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    var focused by remember { mutableStateOf(false) }
+    var pageWidth by remember { mutableIntStateOf(0) }
+
+    // Follow the cursor while typing.
+    val field = vm.bodyField
+    LaunchedEffect(field.text, field.selection, layout, focused) {
+        val l = layout ?: return@LaunchedEffect
+        if (!focused) return@LaunchedEffect
+        val mapped = transformation.filter(AnnotatedString(field.text)).offsetMapping
+            .originalToTransformed(field.selection.end)
+            .coerceIn(0, l.layoutInput.text.length)
+        val r = l.getCursorRect(mapped)
+        val above = with(density) { 24.dp.toPx() }
+        val below = with(density) { 56.dp.toPx() }
+        bringer.bringIntoView(Rect(r.left, r.top - above, r.right + 1f, r.bottom + below))
+    }
+
+    val inkBottom = (s.ink.maxOfOrNull { it.bottom } ?: 0f) * pageWidth
+    val extra = if (s.penMode) 420.dp else 32.dp
+    val minHeight = maxOf(with(density) { inkBottom.toDp() } + extra, 240.dp)
+
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = minHeight)
+            .onSizeChanged { pageWidth = it.width },
+    ) {
+        BasicTextField(
+            value = vm.bodyField,
+            onValueChange = vm::setBody,
+            textStyle = baseStyle.copy(textAlign = s.align.align),
+            visualTransformation = transformation,
+            onTextLayout = { layout = it },
+            cursorBrush = SolidColor(c.accent),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = minHeight)
+                .bringIntoViewRequester(bringer)
+                .onFocusChanged { focused = it.isFocused },
+            decorationBox = { inner ->
+                if (s.body.isEmpty() && s.ink.isEmpty()) {
+                    Text(
+                        if (s.penMode) "Tulis langsung di sini dengan S Pen." else s.prompt,
+                        style = baseStyle.copy(color = c.inkFaint, textAlign = s.align.align),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                inner()
+            },
+        )
+        InkCanvas(
+            strokes = s.ink,
+            editable = s.penMode,
+            pen = s.pen,
+            fingerDraws = !stylusOnly,
+            onStroke = vm::addStroke,
+            onErase = vm::eraseStrokes,
+            modifier = Modifier.matchParentSize(),
+        )
+    }
+    if (s.penMode) {
+        Text(
+            if (stylusOnly) "S Pen menulis, jari menggeser halaman. Tahan tombol S Pen untuk menghapus."
+            else "Jari dan S Pen sama-sama menulis. Atur di Pengaturan → S Pen.",
+            style = Lembar.type.caption,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+    }
+}
+
+/** Heading, list, alignment and tidy buttons. Shown while typing. */
+@Composable
+private fun FormatBar(s: EditorState, vm: EditorViewModel) {
+    val c = Lembar.colors
+    val kind = s.lineKind
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(c.background)
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        FormatChip("Judul", kind == Markup.Kind.H1) { vm.toggleLine(Markup.Kind.H1) }
+        FormatChip("Subjudul", kind == Markup.Kind.H2) { vm.toggleLine(Markup.Kind.H2) }
+        FormatIcon(Icons.AutoMirrored.Outlined.FormatListBulleted, "Daftar poin", kind == Markup.Kind.Bullet) { vm.toggleLine(Markup.Kind.Bullet) }
+        FormatIcon(Icons.Outlined.FormatListNumbered, "Daftar bernomor", kind == Markup.Kind.Number) { vm.toggleLine(Markup.Kind.Number) }
+        val alignIcon = when (s.align) {
+            BodyAlign.Start -> Icons.AutoMirrored.Outlined.FormatAlignLeft
+            BodyAlign.Center -> Icons.Outlined.FormatAlignCenter
+            BodyAlign.End -> Icons.AutoMirrored.Outlined.FormatAlignRight
+            BodyAlign.Justify -> Icons.Outlined.FormatAlignJustify
+        }
+        FormatIcon(alignIcon, s.align.label, false) { vm.cycleAlign() }
+        Box(Modifier.width(1.dp).height(24.dp).background(c.border))
+        Row(
+            Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .clickable { vm.tidy() }
+                .padding(horizontal = 10.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.AutoFixHigh, null, tint = c.ink, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Rapikan", style = Lembar.type.label)
+        }
+    }
+}
+
+@Composable
+private fun FormatChip(label: String, active: Boolean, onClick: () -> Unit) {
+    val c = Lembar.colors
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (active) c.primary else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+    ) {
+        Text(label, style = Lembar.type.label.copy(fontWeight = FontWeight.Bold), color = if (active) c.onPrimary else c.ink)
+    }
+}
+
+@Composable
+private fun FormatIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, active: Boolean, onClick: () -> Unit) {
+    val c = Lembar.colors
+    IconAction(
+        icon, label, onClick,
+        size = 40.dp,
+        tint = if (active) c.onPrimary else c.ink,
+        background = if (active) c.primary else Color.Transparent,
+        shape = RoundedCornerShape(10.dp),
+    )
 }

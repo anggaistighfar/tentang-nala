@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -51,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -74,7 +76,16 @@ import com.lembar.journal.ui.LocalAuthenticator
 import com.lembar.journal.ui.components.IconAction
 import com.lembar.journal.ui.components.MediaImage
 import com.lembar.journal.ui.components.MoodFace
+import com.lembar.journal.data.EntryContent
 import com.lembar.journal.domain.EntryReflection
+import com.lembar.journal.domain.InkCodec
+import com.lembar.journal.domain.InkStroke
+import com.lembar.journal.ui.editor.BodyAlign
+import com.lembar.journal.ui.editor.InkCanvas
+import com.lembar.journal.ui.editor.PenSettings
+import com.lembar.journal.ui.editor.formatted
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.lembar.journal.domain.InsightEngine
 import com.lembar.journal.ui.components.PrimaryButton
 import com.lembar.journal.ui.components.SecondaryButton
@@ -96,12 +107,20 @@ class EntryViewModel(private val c: AppContainer, handle: SavedStateHandle) : Vi
     val entry: StateFlow<JournalEntry?> = c.journal.observe(id).stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val unlocked = c.session.unlocked
 
-    private val _text = MutableStateFlow<Pair<String, String>?>(null)
-    val text: StateFlow<Pair<String, String>?> = _text
+    private val _text = MutableStateFlow<EntryContent?>(null)
+    val text: StateFlow<EntryContent?> = _text
+    private val _ink = MutableStateFlow<List<InkStroke>>(emptyList())
+    val ink: StateFlow<List<InkStroke>> = _ink
 
-    fun loadText() = viewModelScope.launch { _text.value = c.journal.readText(id) }
+    private suspend fun reload() {
+        val content = c.journal.readContent(id)
+        _ink.value = withContext(Dispatchers.Default) { InkCodec.decode(content.ink) }
+        _text.value = content
+    }
+
+    fun loadText() = viewModelScope.launch { reload() }
     fun delete(done: () -> Unit) = viewModelScope.launch { c.journal.delete(id); done() }
-    fun setLocked(v: Boolean) = viewModelScope.launch { c.journal.setLocked(id, v); _text.value = c.journal.readText(id) }
+    fun setLocked(v: Boolean) = viewModelScope.launch { c.journal.setLocked(id, v); reload() }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -111,6 +130,7 @@ fun EntryScreen(onBack: () -> Unit, onEdit: (Long) -> Unit, onPrompt: (String) -
     val entry by vm.entry.collectAsStateWithLifecycle()
     val unlocked by vm.unlocked.collectAsStateWithLifecycle()
     val text by vm.text.collectAsStateWithLifecycle()
+    val ink by vm.ink.collectAsStateWithLifecycle()
     val auth = LocalAuthenticator.current
     val context = LocalContext.current
     val c = Lembar.colors
@@ -184,7 +204,8 @@ fun EntryScreen(onBack: () -> Unit, onEdit: (Long) -> Unit, onPrompt: (String) -
         }
 
         val font = JournalFonts.of(e.fontKey)
-        val (title, body) = text ?: ("" to "")
+        val title = text?.title.orEmpty()
+        val body = text?.body.orEmpty()
         Column(
             Modifier
                 .fillMaxSize()
@@ -219,22 +240,10 @@ fun EntryScreen(onBack: () -> Unit, onEdit: (Long) -> Unit, onPrompt: (String) -
             Box(Modifier.fillMaxWidth().height(1.dp).background(c.border))
             Spacer(Modifier.height(18.dp))
 
-            // Timeline layout from design 2: time on the left, a rule, then content.
-            Row {
-                Column(Modifier.width(52.dp)) {
-                    Text(Fmt.time(e.createdAt), style = t.caption)
-                }
-                Column(
-                    Modifier
-                        .weight(1f)
-                        .drawBehind { drawLine(c.border, Offset(0f, 0f), Offset(0f, size.height), 1.dp.toPx()) }
-                        .padding(start = 14.dp),
-                ) {
-                    if (body.isNotBlank()) {
-                        SelectionContainer { Text(body, style = font.bodyStyle(c.ink)) }
-                    } else {
-                        Text("Tidak ada tulisan.", style = t.bodySmall)
-                    }
+            // Same width, font and formatting as the editor, so handwriting lands exactly where it was written.
+            Column {
+                ReadPage(body, ink, font, BodyAlign.of(e.align))
+                Column {
                     e.attachments.forEach { a ->
                         Spacer(Modifier.height(14.dp))
                         val ratio = if (a.width > 0 && a.height > 0) (a.width.toFloat() / a.height).coerceIn(0.6f, 1.8f) else 1f
@@ -269,6 +278,31 @@ fun EntryScreen(onBack: () -> Unit, onEdit: (Long) -> Unit, onPrompt: (String) -
     }
 
     viewing?.let { ImageViewer(it) { viewing = null } }
+}
+
+@Composable
+private fun ReadPage(body: String, ink: List<InkStroke>, font: com.lembar.journal.ui.theme.JournalFont, align: BodyAlign) {
+    val c = Lembar.colors
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    var width by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val inkBottom = with(density) { ((ink.maxOfOrNull { it.bottom } ?: 0f) * width).toDp() }
+    val base = font.bodyStyle(c.ink)
+    val text = remember(body, base, c.accent) { formatted(body, base, c.accent) }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = if (ink.isEmpty()) 0.dp else inkBottom + 12.dp)
+            .onSizeChanged { width = it.width },
+    ) {
+        if (body.isNotBlank()) {
+            SelectionContainer { Text(text, style = base.copy(textAlign = align.align), modifier = Modifier.fillMaxWidth()) }
+        } else if (ink.isEmpty()) {
+            Text("Tidak ada tulisan.", style = Lembar.type.bodySmall)
+        }
+        if (ink.isNotEmpty()) {
+            InkCanvas(ink, editable = false, pen = PenSettings(), fingerDraws = false, onStroke = {}, onErase = {}, modifier = Modifier.matchParentSize())
+        }
+    }
 }
 
 /** "Catatan dari Nala": a short, gentle reflection on this entry. */

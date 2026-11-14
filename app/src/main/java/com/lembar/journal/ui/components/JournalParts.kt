@@ -47,6 +47,7 @@ import com.lembar.journal.data.Attachment
 import com.lembar.journal.data.JournalEntry
 import com.lembar.journal.data.MediaKind
 import com.lembar.journal.domain.LevelInfo
+import com.lembar.journal.domain.Markup
 import com.lembar.journal.domain.Mood
 import com.lembar.journal.domain.Reflection
 import com.lembar.journal.ui.Fmt
@@ -61,7 +62,8 @@ import kotlin.math.roundToInt
 fun JournalEntry.displayTitle(): String = when {
     locked -> "Jurnal terkunci"
     title.isNotBlank() -> title.trim()
-    body.isNotBlank() -> body.trim().lineSequence().first().take(60)
+    body.isNotBlank() -> Markup.plain(body).trim().lineSequence().first().take(60)
+    hasInk -> "Tulisan tangan"
     attachments.isNotEmpty() -> "Momen tanpa kata"
     else -> mood?.let { "Merasa ${it.label.lowercase()}" } ?: "Tanpa judul"
 }
@@ -98,7 +100,7 @@ fun EntryCard(entry: JournalEntry, onClick: () -> Unit, modifier: Modifier = Mod
                 val preview = when {
                     entry.locked -> "Ketuk untuk membuka dengan sidik jari atau PIN."
                     entry.title.isBlank() -> ""
-                    else -> entry.body.trim()
+                    else -> Markup.plain(entry.body).trim()
                 }
                 if (preview.isNotEmpty()) {
                     Text(preview, style = t.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)

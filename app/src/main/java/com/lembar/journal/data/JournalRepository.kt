@@ -7,6 +7,7 @@ import com.lembar.journal.data.db.EntryWithAttachments
 import com.lembar.journal.data.db.LembarDatabase
 import com.lembar.journal.domain.EntryFacts
 import com.lembar.journal.domain.Emotions
+import com.lembar.journal.domain.Markup
 import com.lembar.journal.domain.Mood
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -49,6 +50,10 @@ data class JournalEntry(
     val locked: Boolean,
     val wordCount: Int,
     val attachments: List<Attachment>,
+    /** Paragraph alignment key, see BodyAlign. */
+    val align: String = "start",
+    /** True when the page has handwriting. The strokes themselves come from [JournalRepository.readContent]. */
+    val hasInk: Boolean = false,
 ) {
     fun facts() = EntryFacts(
         epochDay = date.toEpochDay(),
@@ -76,7 +81,12 @@ data class EntryDraft(
     val fontKey: String,
     val locked: Boolean,
     val media: List<DraftMedia>,
+    val ink: String = "",
+    val align: String = "start",
 )
+
+/** Readable content of an entry (decrypted for locked entries). */
+data class EntryContent(val title: String, val body: String, val ink: String)
 
 class JournalRepository(
     private val db: LembarDatabase,
@@ -92,16 +102,24 @@ class JournalRepository(
     suspend fun get(id: Long): JournalEntry? = dao.getById(id)?.toModel()
 
     /** Returns (title, body) in plain text. Only call after authentication for locked entries. */
-    suspend fun readText(id: Long): Pair<String, String> = withContext(Dispatchers.Default) {
-        val row = dao.getById(id)?.entry ?: return@withContext "" to ""
-        if (row.locked) cipher.decrypt(row.title) to cipher.decrypt(row.body) else row.title to row.body
+    suspend fun readText(id: Long): Pair<String, String> = readContent(id).let { it.title to it.body }
+
+    /** Title, body and handwriting in plain form. Only call after authentication for locked entries. */
+    suspend fun readContent(id: Long): EntryContent = withContext(Dispatchers.Default) {
+        val row = dao.getById(id)?.entry ?: return@withContext EntryContent("", "", "")
+        if (row.locked) {
+            EntryContent(cipher.decrypt(row.title), cipher.decrypt(row.body), cipher.decrypt(row.ink))
+        } else {
+            EntryContent(row.title, row.body, row.ink)
+        }
     }
 
     suspend fun save(draft: EntryDraft): Long = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        val words = countWords(draft.title) + countWords(draft.body)
+        val words = countWords(draft.title) + countWords(Markup.plain(draft.body))
         val title = if (draft.locked) cipher.encrypt(draft.title) else draft.title
         val body = if (draft.locked) cipher.encrypt(draft.body) else draft.body
+        val ink = if (draft.locked) cipher.encrypt(draft.ink) else draft.ink
         val removedFiles = mutableListOf<String>()
 
         val id = db.withTransaction {
@@ -119,6 +137,8 @@ class JournalRepository(
                         fontKey = draft.fontKey,
                         locked = draft.locked,
                         wordCount = words,
+                        ink = ink,
+                        align = draft.align,
                     ),
                 )
             } else {
@@ -132,6 +152,8 @@ class JournalRepository(
                         fontKey = draft.fontKey,
                         locked = draft.locked,
                         wordCount = words,
+                        ink = ink,
+                        align = draft.align,
                     ),
                 )
                 existing.entry.id
@@ -175,9 +197,9 @@ class JournalRepository(
         val row = dao.getById(id)?.entry ?: return@withContext
         if (row.locked == locked) return@withContext
         val updated = if (locked) {
-            row.copy(locked = true, title = cipher.encrypt(row.title), body = cipher.encrypt(row.body))
+            row.copy(locked = true, title = cipher.encrypt(row.title), body = cipher.encrypt(row.body), ink = cipher.encrypt(row.ink))
         } else {
-            row.copy(locked = false, title = cipher.decrypt(row.title), body = cipher.decrypt(row.body))
+            row.copy(locked = false, title = cipher.decrypt(row.title), body = cipher.decrypt(row.body), ink = cipher.decrypt(row.ink))
         }
         dao.updateEntry(updated)
     }
@@ -204,6 +226,8 @@ class JournalRepository(
         attachments = attachments.sortedBy { it.position }.map {
             Attachment(it.id, MediaKind.fromKey(it.kind), media.file(it.fileName), it.width, it.height, it.sizeBytes)
         },
+        align = entry.align,
+        hasInk = entry.ink.isNotEmpty(),
     )
 
     companion object {

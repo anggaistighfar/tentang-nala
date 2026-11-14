@@ -11,7 +11,15 @@ import com.lembar.journal.data.EntryDraft
 import com.lembar.journal.data.JournalRepository
 import com.lembar.journal.data.MediaKind
 import com.lembar.journal.domain.LevelInfo
+import com.lembar.journal.domain.InkCodec
+import com.lembar.journal.domain.InkStroke
 import com.lembar.journal.domain.Lexicon
+import com.lembar.journal.domain.Markup
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import com.lembar.journal.domain.Mood
 import com.lembar.journal.domain.Prompts
 import com.lembar.journal.domain.XpItem
@@ -46,7 +54,16 @@ data class EditorState(
     val emotions: List<String> = emptyList(),
     val customEmotions: List<String> = emptyList(),
     val title: String = "",
-    val body: String = "",
+    /** Body text with cursor and IME composition; formatting lives in the text as Markup. */
+    val bodyValue: TextFieldValue = TextFieldValue(""),
+    val align: BodyAlign = BodyAlign.Start,
+    val ink: List<InkStroke> = emptyList(),
+    val penMode: Boolean = false,
+    val pen: PenSettings = PenSettings(),
+    val canUndoInk: Boolean = false,
+    val canRedoInk: Boolean = false,
+    /** Body before the last "Rapikan", so the snackbar can undo it. */
+    val tidyUndo: TextFieldValue? = null,
     val fontKey: String = "lora",
     val locked: Boolean = false,
     val media: List<DraftMedia> = emptyList(),
@@ -61,11 +78,13 @@ data class EditorState(
     val finished: Boolean = false,
     val message: String? = null,
 ) {
+    val body: String get() = bodyValue.text
+    val lineKind: Markup.Kind get() = Markup.kindAt(Markup.Doc(body, bodyValue.selection.start, bodyValue.selection.end))
     val prompt: String
         get() = fixedPrompt ?: Prompts.forMood(mood).let { it[promptIndex % it.size] }
     val canSave: Boolean
-        get() = !saving && importing == 0 && (title.isNotBlank() || body.isNotBlank() || media.isNotEmpty() || mood != null)
-    val wordCount: Int get() = JournalRepository.countWords(title) + JournalRepository.countWords(body)
+        get() = !saving && importing == 0 && (title.isNotBlank() || body.isNotBlank() || media.isNotEmpty() || ink.isNotEmpty() || mood != null)
+    val wordCount: Int get() = JournalRepository.countWords(title) + JournalRepository.countWords(Markup.plain(body))
     val mediaRoom: Int get() = MAX_MEDIA - media.size - importing
 
     companion object {
@@ -83,6 +102,19 @@ class EditorViewModel(private val c: AppContainer, handle: SavedStateHandle) : V
 
     private val _state = MutableStateFlow(EditorState())
     val state: StateFlow<EditorState> = _state
+
+    /**
+     * The body field's value, held in Compose snapshot state so the text field sees
+     * every change (including auto-inserted "2. ") in the same frame. A Flow would
+     * lag one frame, and fast typing would overwrite the correction.
+     */
+    var bodyField by mutableStateOf(TextFieldValue(""))
+        private set
+
+    private fun putBody(v: TextFieldValue, dirty: Boolean = true) {
+        bodyField = v
+        _state.update { it.copy(bodyValue = v, dirty = it.dirty || dirty) }
+    }
 
     init {
         viewModelScope.launch { load() }
@@ -116,7 +148,7 @@ class EditorViewModel(private val c: AppContainer, handle: SavedStateHandle) : V
             emotions = entry.emotions,
             customEmotions = known.filter { label -> com.lembar.journal.domain.Emotions.all.none { it.label == label } },
             title = entry.title,
-            body = entry.body,
+            align = BodyAlign.of(entry.align),
             fontKey = entry.fontKey,
             locked = entry.locked,
             media = entry.attachments.map { DraftMedia.Existing(it) },
@@ -133,9 +165,98 @@ class EditorViewModel(private val c: AppContainer, handle: SavedStateHandle) : V
     }
 
     private suspend fun loadText() {
-        val (title, body) = c.journal.readText(entryId)
-        _state.update { it.copy(loading = false, needsUnlock = false, title = title, body = body) }
+        val content = c.journal.readContent(entryId)
+        val ink = InkCodec.decode(content.ink)
+        bodyField = TextFieldValue(content.body, TextRange(content.body.length))
+        _state.update {
+            it.copy(
+                loading = false, needsUnlock = false,
+                title = content.title,
+                bodyValue = bodyField,
+                ink = ink,
+            )
+        }
     }
+
+    // ---- Body text & formatting ------------------------------------------------------
+
+    private fun TextFieldValue.doc() = Markup.Doc(text, selection.start, selection.end)
+    private fun Markup.Doc.value() = TextFieldValue(text, TextRange(selStart, selEnd))
+
+    fun setBody(new: TextFieldValue) {
+        val old = bodyField
+        if (new.text == old.text) {
+            // Cursor moved or IME composition changed: only keep the cursor out of hidden markers.
+            val snapped = Markup.snap(new.doc())
+            val v = if (snapped.selStart == new.selection.start) new else new.copy(selection = TextRange(snapped.selStart))
+            putBody(v, dirty = false)
+            return
+        }
+        val fixed = Markup.afterEdit(old.doc(), new.doc())
+        val v = if (fixed.text == new.text && fixed.selStart == new.selection.start && fixed.selEnd == new.selection.end) new else fixed.value()
+        putBody(v)
+        if (_state.value.tidyUndo != null) _state.update { it.copy(tidyUndo = null) }
+    }
+
+    fun toggleLine(kind: Markup.Kind) = putBody(Markup.toggle(bodyField.doc(), kind).value())
+
+    fun cycleAlign() = edit { it.copy(align = it.align.next()) }
+
+    fun tidy() {
+        val before = bodyField
+        val text = Markup.tidy(before.text)
+        if (text == before.text) {
+            _state.update { it.copy(message = "Tulisanmu sudah rapi") }
+            return
+        }
+        putBody(TextFieldValue(text, TextRange(text.length)))
+        _state.update { it.copy(tidyUndo = before) }
+    }
+
+    fun undoTidy() {
+        val prev = _state.value.tidyUndo ?: return
+        putBody(prev)
+        _state.update { it.copy(tidyUndo = null) }
+    }
+
+    fun clearTidyUndo() = _state.update { it.copy(tidyUndo = null) }
+
+    // ---- Handwriting on the page ----------------------------------------------------
+
+    private val inkUndo = ArrayDeque<List<InkStroke>>()
+    private val inkRedo = ArrayDeque<List<InkStroke>>()
+
+    private fun commitInk(next: List<InkStroke>) {
+        inkUndo.addLast(_state.value.ink)
+        if (inkUndo.size > 100) inkUndo.removeFirst()
+        inkRedo.clear()
+        edit { it.copy(ink = next, canUndoInk = true, canRedoInk = false) }
+    }
+
+    fun addStroke(stroke: InkStroke) {
+        if (_state.value.ink.sumOf { it.points.size } + stroke.points.size > InkCodec.MAX_POINTS) {
+            _state.update { it.copy(message = "Halaman ini sudah penuh tulisan tangan. Lanjutkan di jurnal baru.") }
+            return
+        }
+        commitInk(_state.value.ink + stroke)
+    }
+
+    fun eraseStrokes(gone: List<InkStroke>) = commitInk(_state.value.ink.filterNot { it in gone })
+
+    fun undoInk() {
+        val prev = inkUndo.removeLastOrNull() ?: return
+        inkRedo.addLast(_state.value.ink)
+        edit { it.copy(ink = prev, canUndoInk = inkUndo.isNotEmpty(), canRedoInk = true) }
+    }
+
+    fun redoInk() {
+        val next = inkRedo.removeLastOrNull() ?: return
+        inkUndo.addLast(_state.value.ink)
+        edit { it.copy(ink = next, canUndoInk = true, canRedoInk = inkRedo.isNotEmpty()) }
+    }
+
+    fun setPenMode(on: Boolean) = _state.update { it.copy(penMode = on) }
+    fun setPen(p: PenSettings) = _state.update { it.copy(pen = p) }
 
     private inline fun edit(crossinline f: (EditorState) -> EditorState) = _state.update { f(it).copy(dirty = true) }
 
@@ -155,7 +276,6 @@ class EditorViewModel(private val c: AppContainer, handle: SavedStateHandle) : V
         }
     }
     fun setTitle(v: String) = edit { it.copy(title = v) }
-    fun setBody(v: String) = edit { it.copy(body = v) }
     fun setFont(key: String) = edit { it.copy(fontKey = key) }
     fun setLocked(v: Boolean) = edit { it.copy(locked = v) }
     fun nextPrompt() = _state.update { it.copy(promptIndex = it.promptIndex + 1, fixedPrompt = null) }
@@ -228,6 +348,8 @@ class EditorViewModel(private val c: AppContainer, handle: SavedStateHandle) : V
                     fontKey = s.fontKey,
                     locked = s.locked,
                     media = s.media,
+                    ink = InkCodec.encode(s.ink),
+                    align = s.align.key,
                 ),
             )
             val after = XpRules.compute(c.journal.entries.first().map { it.facts() }, today)
