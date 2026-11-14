@@ -19,7 +19,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Draw
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.HighQuality
@@ -85,6 +87,16 @@ fun SettingsScreen(vm: AppViewModel, settings: Settings, contentPadding: Padding
             vm.rescheduleReminder()
         }
         onPauseOrDispose {}
+    }
+
+    val backupStatus by vm.backup.collectAsStateWithLifecycle()
+    var pendingExport by remember { mutableStateOf<android.net.Uri?>(null) }
+    var pendingRestore by remember { mutableStateOf<android.net.Uri?>(null) }
+    val createFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri != null) pendingExport = uri
+    }
+    val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) pendingRestore = uri
     }
 
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -177,6 +189,36 @@ fun SettingsScreen(vm: AppViewModel, settings: Settings, contentPadding: Padding
                 trailing = { LembarSwitch(settings.stylusOnly) { vm.setStylusOnly(it) } },
             )
         }
+        Group("Cadangan") {
+            val last = settings.lastBackupAt
+            val days = if (last == 0L) -1L else (System.currentTimeMillis() - last) / 86_400_000L
+            SettingRow(
+                Icons.Outlined.Backup, "Buat cadangan",
+                when {
+                    last == 0L -> "Belum pernah. Simpan semua jurnal & foto ke satu file berpassword."
+                    days == 0L -> "Terakhir: hari ini"
+                    else -> "Terakhir: $days hari lalu"
+                },
+                onClick = {
+                    val start = { createFile.launch(com.lembar.journal.data.backup.BackupManager.suggestedName()) }
+                    // Locked entries are decrypted into the (password-protected) backup, so confirm it's the owner.
+                    if (vm.hasLockedEntries()) auth.authenticate("Buat cadangan", "Jurnal terkunci ikut dicadangkan", onSuccess = start, force = true)
+                    else start()
+                },
+            )
+            SettingRow(
+                Icons.Outlined.Restore, "Pulihkan dari cadangan",
+                "Menambahkan jurnal dari file .nala. Tidak menghapus jurnal yang sudah ada.",
+                onClick = { openFile.launch(arrayOf("*/*")) },
+            )
+            if (entries.isNotEmpty() && (last == 0L || days >= 14)) {
+                Text(
+                    "Jurnal hanya tersimpan di HP ini. Buat cadangan rutin dan simpan filenya di Google Drive atau tempat lain, supaya tidak hilang kalau HP rusak atau aplikasi terhapus.",
+                    style = t.caption.copy(color = c.danger),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                )
+            }
+        }
         Group("Penyimpanan") {
             SettingRow(Icons.Outlined.HighQuality, "Kualitas foto", "${settings.photoQuality.label} · maks ${settings.photoQuality.maxEdge}px", onClick = { dialog = "quality" })
             SettingRow(Icons.Outlined.Storage, "Terpakai di HP", "${Fmt.bytes(storage)} untuk ${entries.size} catatan")
@@ -187,6 +229,56 @@ fun SettingsScreen(vm: AppViewModel, settings: Settings, contentPadding: Padding
             }
             SettingRow(Icons.Outlined.Info, "Tentang Nala $version", "Semua catatan hanya tersimpan di HP ini. Tidak ada akun, tidak ada server.")
         }
+    }
+
+    pendingExport?.let { uri ->
+        PasswordDialog(
+            title = "Password cadangan",
+            message = "File cadangan dikunci dengan password ini. Password tidak bisa dipulihkan, jadi catat di tempat aman.",
+            confirmTwice = true,
+            confirmLabel = "Buat cadangan",
+            onDismiss = {
+                pendingExport = null
+                runCatching { android.provider.DocumentsContract.deleteDocument(context.contentResolver, uri) }
+            },
+            onConfirm = { pw -> pendingExport = null; vm.exportBackup(uri, pw) },
+        )
+    }
+    pendingRestore?.let { uri ->
+        PasswordDialog(
+            title = "Pulihkan cadangan",
+            message = "Masukkan password yang dipakai saat membuat cadangan ini.",
+            confirmTwice = false,
+            confirmLabel = "Pulihkan",
+            onDismiss = { pendingRestore = null },
+            onConfirm = { pw -> pendingRestore = null; vm.restoreBackup(uri, pw) },
+        )
+    }
+    when (val b = backupStatus) {
+        is AppViewModel.BackupStatus.Working -> AlertDialog(
+            onDismissRequest = {},
+            title = { Text(b.label) },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.CircularProgressIndicator(Modifier.padding(end = 16.dp), color = c.ink)
+                    Text("Jangan tutup aplikasi.")
+                }
+            },
+            confirmButton = {},
+        )
+        is AppViewModel.BackupStatus.Done -> AlertDialog(
+            onDismissRequest = vm::clearBackupStatus,
+            title = { Text(b.title) },
+            text = { Text(b.message) },
+            confirmButton = { TextButton(onClick = vm::clearBackupStatus) { Text("Oke") } },
+        )
+        is AppViewModel.BackupStatus.Failed -> AlertDialog(
+            onDismissRequest = vm::clearBackupStatus,
+            title = { Text("Tidak berhasil") },
+            text = { Text(b.message) },
+            confirmButton = { TextButton(onClick = vm::clearBackupStatus) { Text("Oke") } },
+        )
+        AppViewModel.BackupStatus.Idle -> Unit
     }
 
     when (dialog) {
@@ -235,6 +327,56 @@ fun SettingsScreen(vm: AppViewModel, settings: Settings, contentPadding: Padding
             )
         }
     }
+}
+
+@Composable
+private fun PasswordDialog(
+    title: String,
+    message: String,
+    confirmTwice: Boolean,
+    confirmLabel: String,
+    onDismiss: () -> Unit,
+    onConfirm: (CharArray) -> Unit,
+) {
+    var pw by remember { mutableStateOf("") }
+    var pw2 by remember { mutableStateOf("") }
+    var show by remember { mutableStateOf(false) }
+    val tooShort = pw.length < 6
+    val mismatch = confirmTwice && pw2.isNotEmpty() && pw != pw2
+    val ok = !tooShort && (!confirmTwice || pw == pw2)
+    val visual = if (show) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation()
+    val kb = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                Text(message, style = Lembar.type.bodySmall)
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    pw, { pw = it.take(64) },
+                    label = { Text("Password (min. 6 karakter)") },
+                    singleLine = true, visualTransformation = visual, keyboardOptions = kb, colors = fieldColors(),
+                )
+                if (confirmTwice) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        pw2, { pw2 = it.take(64) },
+                        label = { Text("Ulangi password") },
+                        isError = mismatch,
+                        supportingText = if (mismatch) ({ Text("Password tidak sama") }) else null,
+                        singleLine = true, visualTransformation = visual, keyboardOptions = kb, colors = fieldColors(),
+                    )
+                }
+                Row(Modifier.clickable { show = !show }.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.Checkbox(show, { show = it })
+                    Text("Tampilkan password", style = Lembar.type.bodySmall)
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(pw.toCharArray()) }, enabled = ok) { Text(confirmLabel) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } },
+    )
 }
 
 @Composable

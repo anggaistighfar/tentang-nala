@@ -88,6 +88,63 @@ class AppViewModel(private val c: AppContainer) : ViewModel() {
         if (enabled) c.reminders.schedule(hour, minute) else c.reminders.cancel()
     }
 
+    // ---- Backup ------------------------------------------------------------------
+
+    sealed interface BackupStatus {
+        data object Idle : BackupStatus
+        data class Working(val label: String) : BackupStatus
+        data class Done(val title: String, val message: String) : BackupStatus
+        data class Failed(val message: String) : BackupStatus
+    }
+
+    private val _backup = MutableStateFlow<BackupStatus>(BackupStatus.Idle)
+    val backup: StateFlow<BackupStatus> = _backup
+
+    fun clearBackupStatus() { _backup.value = BackupStatus.Idle }
+
+    fun exportBackup(uri: android.net.Uri, password: CharArray) = viewModelScope.launch {
+        _backup.value = BackupStatus.Working("Membuat cadangan…")
+        _backup.value = try {
+            val r = c.backup.export(uri, password)
+            c.settings.setLastBackup(System.currentTimeMillis())
+            BackupStatus.Done(
+                "Cadangan tersimpan",
+                "${r.entries} jurnal dan ${r.media} gambar (${Fmt.bytes(r.bytes)}). Simpan file ini di tempat aman, misalnya Google Drive, dan ingat password-nya.",
+            )
+        } catch (t: Throwable) {
+            BackupStatus.Failed("Cadangan gagal dibuat: ${t.message ?: t.javaClass.simpleName}")
+        } finally {
+            password.fill(' ')
+        }
+    }
+
+    fun restoreBackup(uri: android.net.Uri, password: CharArray) = viewModelScope.launch {
+        _backup.value = BackupStatus.Working("Memulihkan jurnal…")
+        _backup.value = try {
+            val r = c.backup.restore(uri, password)
+            BackupStatus.Done(
+                "Pemulihan selesai",
+                buildString {
+                    append("${r.added} jurnal ditambahkan")
+                    if (r.media > 0) append(" (${r.media} gambar)")
+                    append(".")
+                    if (r.skipped > 0) append(" ${r.skipped} jurnal sudah ada di HP ini, jadi dilewati.")
+                    append(" Tidak ada jurnal yang dihapus atau ditimpa.")
+                },
+            )
+        } catch (_: com.lembar.journal.data.backup.WrongPasswordException) {
+            BackupStatus.Failed("Password salah, atau file cadangan rusak. Jurnalmu tidak berubah.")
+        } catch (_: com.lembar.journal.data.backup.NotABackupException) {
+            BackupStatus.Failed("File ini bukan cadangan Tentang Nala. Jurnalmu tidak berubah.")
+        } catch (t: Throwable) {
+            BackupStatus.Failed("Pemulihan gagal: ${t.message ?: t.javaClass.simpleName}. Jurnalmu tidak berubah.")
+        } finally {
+            password.fill(' ')
+        }
+    }
+
+    fun hasLockedEntries() = entries.value.any { it.locked }
+
     fun canNotify() = c.reminders.canNotify()
     fun canExactAlarm() = c.reminders.canExact()
 

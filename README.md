@@ -55,6 +55,19 @@ Analisis berjalan sepenuhnya di HP dengan aturan yang bisa dibaca di [`Insights.
 
 > Analisis ini otomatis dan **bukan diagnosis atau pengganti psikolog**. Kalau perasaanmu terasa berat atau berlangsung lama, bicaralah dengan tenaga profesional.
 
+## Cadangkan & Pulihkan
+
+**Pengaturan → Cadangan**
+
+- **Buat cadangan**: semua jurnal (termasuk yang terkunci), foto, sketsa, dan tulisan tangan disimpan ke satu file `.nala` yang dikunci dengan password pilihanmu (AES-256-GCM, kunci dari PBKDF2 210.000 iterasi). Kamu memilih sendiri lokasinya: folder Download, Google Drive, dll.
+- **Pulihkan dari cadangan**: pilih file `.nala` dan masukkan password-nya. Jurnal yang belum ada di HP ditambahkan; yang sudah ada dilewati. **Tidak ada jurnal yang dihapus atau ditimpa.** Password salah atau file rusak ditolak sebelum apa pun berubah.
+- Bisa dipakai untuk pindah ke HP baru, atau memulihkan jurnal setelah aplikasi terhapus.
+- Password tidak bisa dipulihkan. Catat di tempat aman.
+
+## Update aplikasi tanpa kehilangan data
+
+Pasang APK versi baru **di atas** versi lama (ketuk file APK → Perbarui). Semua versi memakai ID aplikasi dan kunci tanda tangan yang sama, jadi Android memperlakukannya sebagai update dan jurnal tetap ada. **Jangan uninstall** sebelum update; uninstall menghapus semua jurnal di HP. Untuk berjaga-jaga, buat cadangan dulu sebelum update.
+
 ## Privasi
 
 - Data hanya ada di HP: database dan foto berada di penyimpanan privat aplikasi, tidak muncul di Galeri.

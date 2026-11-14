@@ -28,6 +28,14 @@ interface JournalDao {
     @Query("SELECT fileName FROM attachments")
     suspend fun allAttachmentFiles(): List<String>
 
+    @Transaction
+    @Query("SELECT * FROM entries ORDER BY date, createdAt")
+    suspend fun allWithAttachments(): List<EntryWithAttachments>
+
+    /** Identity used to skip entries that already exist when restoring a backup. */
+    @Query("SELECT date || ':' || createdAt FROM entries")
+    suspend fun allEntryKeys(): List<String>
+
     @Insert
     suspend fun insertEntry(entry: EntryEntity): Long
 

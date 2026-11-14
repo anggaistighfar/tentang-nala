@@ -5,6 +5,7 @@ import com.lembar.journal.data.EntryCipher
 import com.lembar.journal.data.JournalRepository
 import com.lembar.journal.data.MediaStorage
 import com.lembar.journal.data.SettingsRepository
+import com.lembar.journal.data.backup.BackupManager
 import com.lembar.journal.data.db.LembarDatabase
 import com.lembar.journal.reminder.ReminderScheduler
 import com.lembar.journal.security.SessionLock
@@ -19,6 +20,7 @@ class AppContainer(app: Application) {
     val media = MediaStorage(app)
     val cipher = EntryCipher()
     val journal = JournalRepository(database, cipher, media)
+    val backup = BackupManager(app, database, cipher, media)
     val settings = SettingsRepository(app)
     val reminders = ReminderScheduler(app)
     val session = SessionLock()
