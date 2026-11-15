@@ -60,11 +60,12 @@ import java.time.temporal.TemporalAdjusters
 import kotlin.math.roundToInt
 
 fun JournalEntry.displayTitle(): String = when {
-    locked -> "Jurnal terkunci"
+    locked -> "${type.label} terkunci"
     title.isNotBlank() -> title.trim()
     body.isNotBlank() -> Markup.plain(body).trim().lineSequence().first().take(60)
     hasInk -> "Tulisan tangan"
     attachments.isNotEmpty() -> "Momen tanpa kata"
+    type.creative -> "${type.label} tanpa judul"
     else -> mood?.let { "Merasa ${it.label.lowercase()}" } ?: "Tanpa judul"
 }
 
@@ -87,6 +88,10 @@ fun EntryCard(entry: JournalEntry, onClick: () -> Unit, modifier: Modifier = Mod
                 if (showDate) {
                     Text(Fmt.dayMonth(entry.date), style = t.caption)
                     Spacer(Modifier.height(4.dp))
+                }
+                if (entry.type.creative) {
+                    Tag(entry.type.label)
+                    Spacer(Modifier.height(6.dp))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (entry.locked) {

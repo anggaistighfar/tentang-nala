@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -77,12 +78,14 @@ import com.lembar.journal.ui.components.IconAction
 import com.lembar.journal.ui.components.MediaImage
 import com.lembar.journal.ui.components.MoodFace
 import com.lembar.journal.data.EntryContent
+import com.lembar.journal.domain.CheckStatus
+import com.lembar.journal.domain.CreativeReview
+import com.lembar.journal.domain.CreativeReviewer
 import com.lembar.journal.domain.EntryReflection
 import com.lembar.journal.domain.InkCodec
 import com.lembar.journal.domain.InkStroke
 import com.lembar.journal.ui.editor.BodyAlign
 import com.lembar.journal.ui.editor.InkCanvas
-import com.lembar.journal.ui.editor.PenSettings
 import com.lembar.journal.ui.editor.formatted
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -258,7 +261,12 @@ fun EntryScreen(onBack: () -> Unit, onEdit: (Long) -> Unit, onPrompt: (String) -
             val reflection = remember(e.id, e.updatedAt, title, body) {
                 InsightEngine.reflect(e.toInsight("$title\n$body"))
             }
-            ReflectionCard(reflection, onPrompt)
+            if (e.type.creative && !reflection.crisis) {
+                val review = remember(e.id, e.updatedAt, title, body) { CreativeReviewer.review(e.type, title, body) }
+                if (review != null) ReviewCard(review)
+            } else {
+                ReflectionCard(reflection, onPrompt)
+            }
             Spacer(Modifier.height(16.dp))
             if (e.updatedAt - e.createdAt > 60_000) {
                 Text("Terakhir diubah ${Fmt.short(java.time.Instant.ofEpochMilli(e.updatedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate())}, ${Fmt.time(e.updatedAt)}", style = t.caption)
@@ -300,8 +308,96 @@ private fun ReadPage(body: String, ink: List<InkStroke>, font: com.lembar.journa
             Text("Tidak ada tulisan.", style = Lembar.type.bodySmall)
         }
         if (ink.isNotEmpty()) {
-            InkCanvas(ink, editable = false, pen = PenSettings(), fingerDraws = false, onStroke = {}, onErase = {}, modifier = Modifier.matchParentSize())
+            InkCanvas(ink, null, Modifier.matchParentSize())
         }
+    }
+}
+
+/** "Penilaian Nala" for ideas, stories, pantun and poems. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ReviewCard(r: CreativeReview) {
+    val c = Lembar.colors
+    val t = Lembar.type
+    val good = Color(0xFF4F9A5B)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(c.surface)
+            .padding(18.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Psychology, null, tint = c.accent, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Penilaian Nala · ${r.type.label}", style = t.label)
+        }
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (r.score != null) {
+                Box(Modifier.size(64.dp), contentAlignment = Alignment.Center) {
+                    androidx.compose.foundation.Canvas(Modifier.matchParentSize()) {
+                        val w = 5.dp.toPx()
+                        val inset = w / 2
+                        val sz = androidx.compose.ui.geometry.Size(size.width - w, size.height - w)
+                        drawArc(c.surfaceAlt, 0f, 360f, false, Offset(inset, inset), sz, style = androidx.compose.ui.graphics.drawscope.Stroke(w))
+                        drawArc(
+                            c.accent, -90f, 360f * r.score / 100f, false, Offset(inset, inset), sz,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(w, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+                        )
+                    }
+                    Text("${r.score}", style = t.title)
+                }
+                Spacer(Modifier.width(14.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text(r.verdict, style = t.title)
+                if (r.score != null) Text("Nilai ${r.score} dari 100", style = t.caption)
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        r.checks.forEach { ch ->
+            Row(Modifier.padding(vertical = 5.dp)) {
+                val (sym, col) = when (ch.status) {
+                    CheckStatus.Good -> "✓" to good
+                    CheckStatus.Warn -> "!" to c.accent
+                    CheckStatus.Info -> "i" to c.inkMuted
+                }
+                Box(Modifier.size(22.dp).clip(CircleShape).background(col.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                    Text(sym, style = t.caption.copy(color = col, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
+                }
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text(ch.label, style = t.label)
+                    Text(ch.detail, style = t.bodySmall)
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(c.border))
+        Spacer(Modifier.height(12.dp))
+        Text("Catatan psikologis", style = t.label)
+        Spacer(Modifier.height(4.dp))
+        Text(r.psych, style = t.body)
+        if (r.toneWords.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Tag("Suasana: ${r.tone}")
+                r.toneWords.forEach { Tag(it) }
+            }
+        }
+        if (r.tips.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Text("Saran", style = t.label)
+            r.tips.forEach { tip ->
+                Row(Modifier.padding(top = 4.dp)) {
+                    Text("•  ", style = t.bodySmall.copy(color = c.accent))
+                    Text(tip, style = t.bodySmall)
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text("Penilaian otomatis berdasarkan bentuk dan kata. Rasa dan maknanya tetap milikmu.", style = t.caption)
     }
 }
 

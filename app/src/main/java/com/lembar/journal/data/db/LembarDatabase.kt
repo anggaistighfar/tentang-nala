@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [EntryEntity::class, AttachmentEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class LembarDatabase : RoomDatabase() {
@@ -26,9 +26,16 @@ abstract class LembarDatabase : RoomDatabase() {
             }
         }
 
+        /** v1.3 → v1.4: kind of writing (journal, idea, story, pantun, poem). Old entries become journals. */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE entries ADD COLUMN type TEXT NOT NULL DEFAULT 'journal'")
+            }
+        }
+
         fun create(context: Context): LembarDatabase =
             Room.databaseBuilder(context, LembarDatabase::class.java, FILE_NAME)
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
     }
 }

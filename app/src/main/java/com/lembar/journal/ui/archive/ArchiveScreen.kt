@@ -39,7 +39,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import com.lembar.journal.data.JournalEntry
+import com.lembar.journal.domain.EntryType
 import com.lembar.journal.domain.Mood
+import com.lembar.journal.ui.components.Chip
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import com.lembar.journal.ui.Fmt
 import com.lembar.journal.ui.components.EmptyState
 import com.lembar.journal.ui.components.EntryCard
@@ -53,11 +57,13 @@ fun ArchiveScreen(entries: List<JournalEntry>, contentPadding: PaddingValues, on
     val t = Lembar.type
     var query by rememberSaveable { mutableStateOf("") }
     var moodFilter by rememberSaveable { mutableStateOf(0) }
+    var typeFilter by rememberSaveable { mutableStateOf("") }
 
-    val filtered = remember(entries, query, moodFilter) {
+    val filtered = remember(entries, query, moodFilter, typeFilter) {
         val q = query.trim().lowercase()
         entries.filter { e ->
-            (moodFilter == 0 || e.mood?.value == moodFilter) &&
+            (typeFilter.isEmpty() || e.type.key == typeFilter) &&
+                (moodFilter == 0 || e.mood?.value == moodFilter) &&
                 (q.isEmpty() || (!e.locked && (e.title.lowercase().contains(q) || e.body.lowercase().contains(q) || e.emotions.any { it.contains(q) })))
         }
     }
@@ -116,6 +122,15 @@ fun ArchiveScreen(entries: List<JournalEntry>, contentPadding: PaddingValues, on
                         }
                     }
                 }
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    (listOf<EntryType?>(null) + EntryType.entries).forEach { t ->
+                        val key = t?.key.orEmpty()
+                        val n = if (t == null) entries.size else entries.count { it.type == t }
+                        if (t != null && n == 0) return@forEach
+                        Chip("${t?.label ?: "Semua"} · $n", typeFilter == key, { typeFilter = key })
+                    }
+                }
                 if (query.isNotEmpty()) {
                     Spacer(Modifier.height(6.dp))
                     Text("Jurnal terkunci tidak ikut dicari.", style = t.caption)
@@ -128,7 +143,7 @@ fun ArchiveScreen(entries: List<JournalEntry>, contentPadding: PaddingValues, on
             item {
                 EmptyState(
                     if (entries.isEmpty()) "Arsip masih kosong" else "Tidak ada yang cocok",
-                    if (entries.isEmpty()) "Catatan pertamamu akan muncul di sini." else "Coba kata lain atau hapus filter mood.",
+                    if (entries.isEmpty()) "Catatan pertamamu akan muncul di sini." else "Coba kata lain atau hapus filter.",
                 )
             }
         }

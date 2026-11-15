@@ -11,6 +11,8 @@ import com.lembar.journal.data.EntryDraft
 import com.lembar.journal.data.JournalRepository
 import com.lembar.journal.data.MediaKind
 import com.lembar.journal.domain.LevelInfo
+import com.lembar.journal.domain.CreativeReviewer
+import com.lembar.journal.domain.EntryType
 import com.lembar.journal.domain.InkCodec
 import com.lembar.journal.domain.InkStroke
 import com.lembar.journal.domain.Lexicon
@@ -59,6 +61,8 @@ data class EditorState(
     val align: BodyAlign = BodyAlign.Start,
     val ink: List<InkStroke> = emptyList(),
     val penMode: Boolean = false,
+    val penInk: Boolean = true,
+    val type: EntryType = EntryType.Journal,
     val pen: PenSettings = PenSettings(),
     val canUndoInk: Boolean = false,
     val canRedoInk: Boolean = false,
@@ -81,7 +85,10 @@ data class EditorState(
     val body: String get() = bodyValue.text
     val lineKind: Markup.Kind get() = Markup.kindAt(Markup.Doc(body, bodyValue.selection.start, bodyValue.selection.end))
     val prompt: String
-        get() = fixedPrompt ?: Prompts.forMood(mood).let { it[promptIndex % it.size] }
+        get() = fixedPrompt
+            ?: if (type.creative) type.placeholder
+            else Prompts.forMood(mood).let { it[promptIndex % it.size] }
+    val liveHint: String? get() = CreativeReviewer.liveHint(type, body)
     val canSave: Boolean
         get() = !saving && importing == 0 && (title.isNotBlank() || body.isNotBlank() || media.isNotEmpty() || ink.isNotEmpty() || mood != null)
     val wordCount: Int get() = JournalRepository.countWords(title) + JournalRepository.countWords(Markup.plain(body))
@@ -99,6 +106,7 @@ class EditorViewModel(private val c: AppContainer, handle: SavedStateHandle) : V
         ?.let(LocalDate::ofEpochDay) ?: LocalDate.now()
     private val prompt: String? = handle.get<String>("prompt")?.takeIf { it.isNotBlank() }
     private val checkin: Boolean = handle.get<String>("checkin")?.toBoolean() ?: true
+    private val startType: EntryType = EntryType.of(handle.get<String>("type"))
 
     private val _state = MutableStateFlow(EditorState())
     val state: StateFlow<EditorState> = _state
@@ -126,8 +134,10 @@ class EditorViewModel(private val c: AppContainer, handle: SavedStateHandle) : V
             _state.value = EditorState(
                 loading = false,
                 isNew = true,
-                step = if (checkin) EditorStep.Mood else EditorStep.Write,
+                step = if (checkin && startType == EntryType.Journal) EditorStep.Mood else EditorStep.Write,
                 date = startDate,
+                type = startType,
+                penInk = settings.penInk,
                 fontKey = settings.defaultFont,
                 fixedPrompt = prompt,
                 promptIndex = (startDate.dayOfYear % 7),
@@ -148,6 +158,8 @@ class EditorViewModel(private val c: AppContainer, handle: SavedStateHandle) : V
             emotions = entry.emotions,
             customEmotions = known.filter { label -> com.lembar.journal.domain.Emotions.all.none { it.label == label } },
             title = entry.title,
+            type = entry.type,
+            penInk = settings.penInk,
             align = BodyAlign.of(entry.align),
             fontKey = entry.fontKey,
             locked = entry.locked,
@@ -256,6 +268,21 @@ class EditorViewModel(private val c: AppContainer, handle: SavedStateHandle) : V
     }
 
     fun setPenMode(on: Boolean) = _state.update { it.copy(penMode = on) }
+    fun setPenInk(on: Boolean) {
+        _state.update { it.copy(penInk = on) }
+        viewModelScope.launch { c.settings.setPenInk(on) }
+    }
+
+    fun setType(t: EntryType) = edit { it.copy(type = t) }
+
+    /** Inserts the type's outline (headings) at the end of the body. */
+    fun insertOutline() {
+        val outline = _state.value.type.outline ?: return
+        val cur = bodyField.text.trimEnd()
+        val text = if (cur.isEmpty()) outline else "$cur\n\n$outline"
+        val firstGap = text.indexOf("\n", text.indexOf(outline) ) + 1
+        putBody(TextFieldValue(text, TextRange(firstGap.coerceIn(0, text.length))))
+    }
     fun setPen(p: PenSettings) = _state.update { it.copy(pen = p) }
 
     private inline fun edit(crossinline f: (EditorState) -> EditorState) = _state.update { f(it).copy(dirty = true) }
@@ -350,6 +377,7 @@ class EditorViewModel(private val c: AppContainer, handle: SavedStateHandle) : V
                     media = s.media,
                     ink = InkCodec.encode(s.ink),
                     align = s.align.key,
+                    type = s.type,
                 ),
             )
             val after = XpRules.compute(c.journal.entries.first().map { it.facts() }, today)

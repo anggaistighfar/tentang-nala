@@ -62,6 +62,33 @@ object Lexicon {
 
     fun hasCrisis(text: String): Boolean = containsAny(normalize(text), crisis)
 
+    // ---- Emotional tone of creative writing ---------------------------------------
+
+    val positive = listOf(
+        "senang", "bahagia", "gembira", "ceria", "riang", "cinta", "sayang", "kasih", "indah", "damai", "tenang",
+        "harap", "harapan", "syukur", "bersyukur", "tawa", "tertawa", "senyum", "tersenyum", "hangat", "terang",
+        "cerah", "lega", "menang", "berhasil", "sukses", "bangga", "semangat", "kuat", "manis", "mekar", "pelangi",
+        "merdu", "nyaman", "aman", "peluk", "memeluk", "rindu", "setia", "tulus", "suka", "asyik", "seru", "ramah",
+        "terima kasih", "berkah", "mimpi", "impian", "cahaya", "bersinar", "sejuk", "segar", "sehat", "hidup",
+    )
+    val negative = listOf(
+        "sedih", "duka", "tangis", "menangis", "luka", "terluka", "sakit", "perih", "kecewa", "marah", "benci",
+        "takut", "cemas", "gelisah", "sepi", "sunyi", "kesepian", "hancur", "patah", "gagal", "kalah", "gelap",
+        "kelam", "dingin", "pahit", "lelah", "letih", "putus asa", "hilang", "kehilangan", "mati", "kematian",
+        "derita", "menderita", "pilu", "lara", "nestapa", "resah", "khawatir", "tertekan", "terpuruk", "sendiri",
+        "menyesal", "sesal", "malu", "bersalah", "kesal", "murung", "suram", "badai", "air mata",
+    )
+    val positiveSet: Set<String> = positive.filter { ' ' !in it }.toSet()
+    val negativeSet: Set<String> = negative.filter { ' ' !in it }.toSet()
+
+    /** Sensory words that build an image in poems. */
+    val imagery: Set<String> = setOf(
+        "langit", "bulan", "bintang", "matahari", "senja", "fajar", "pagi", "malam", "hujan", "angin", "laut",
+        "ombak", "pantai", "gunung", "sungai", "daun", "bunga", "embun", "awan", "pelangi", "cahaya", "bayang",
+        "merah", "biru", "jingga", "kelabu", "hijau", "putih", "hitam", "suara", "sunyi", "harum", "wangi", "dingin",
+        "hangat", "basah", "debu", "jalan", "jendela", "lampu", "api", "batu", "pasir", "burung", "kupu",
+    )
+
     // ---- Life themes ------------------------------------------------------------
 
     enum class Kind { Area, Activity }

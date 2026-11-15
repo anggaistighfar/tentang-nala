@@ -13,7 +13,12 @@ data class InsightEntry(
     val emotions: List<String>,
     val text: String,
     val locked: Boolean,
+    val type: EntryType = EntryType.Journal,
+    val title: String = "",
+    val body: String = "",
 )
+
+data class CreativeStat(val type: EntryType, val count: Int, val avgScore: Int?)
 
 enum class Concern { None, Watch, ReachOut, Urgent }
 
@@ -52,6 +57,7 @@ data class InsightReport(
     val bestDay: DayOfWeek?,
     val worstDay: DayOfWeek?,
     val crisisDates: List<LocalDate>,
+    val creative: List<CreativeStat>,
     val textAnalyzed: Int,
     val lockedSkipped: Int,
     val concern: Concern,
@@ -114,7 +120,8 @@ object InsightEngine {
         val pos = inRange.sumOf { e -> e.emotions.count { valence[it] == Valence.Positive } }
         val neg = inRange.sumOf { e -> e.emotions.count { valence[it] == Valence.Negative } }
 
-        val withText = inRange.filter { it.text.isNotBlank() }
+        // Stories and poems may be fiction: their words say little about the writer's own thinking.
+        val withText = inRange.filter { it.text.isNotBlank() && (it.type == EntryType.Journal || it.type == EntryType.Idea) }
         val normalized = withText.map { it to Lexicon.normalize(it.text) }
         val themes = themeFindings(normalized, avg)
         val distortions = distortionFindings(normalized)
@@ -152,6 +159,10 @@ object InsightEngine {
             themes = themes, distortions = distortions,
             bestDay = best, worstDay = worst,
             crisisDates = crisisDates,
+            creative = inRange.filter { it.type.creative }.groupBy { it.type }.map { (t, l) ->
+                val scores = l.filter { it.body.isNotBlank() }.mapNotNull { CreativeReviewer.review(t, it.title, it.body)?.score }
+                CreativeStat(t, l.size, scores.takeIf { it.isNotEmpty() }?.average()?.roundToInt())
+            }.sortedBy { it.type.ordinal },
             textAnalyzed = withText.size,
             lockedSkipped = inRange.count { it.locked && it.text.isBlank() },
             concern = concern,

@@ -57,6 +57,7 @@ class BackupManager(
                     .put("emotions", e.emotions)
                     .put("fontKey", e.fontKey)
                     .put("align", e.align)
+                    .put("type", e.type)
                     .put("locked", e.locked)
                     .put("wordCount", e.wordCount)
                     .put(
@@ -166,6 +167,7 @@ class BackupManager(
                                 wordCount = o.optInt("wordCount"),
                                 ink = seal(o.optString("ink")),
                                 align = o.optString("align", "start"),
+                                type = o.optString("type", "journal"),
                             ),
                         )
                         val atts = o.optJSONArray("attachments") ?: JSONArray()

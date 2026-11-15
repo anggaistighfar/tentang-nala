@@ -16,11 +16,12 @@ import kotlinx.coroutines.launch
 
 /** Hand-rolled dependency container; the app is small enough not to need Hilt. */
 class AppContainer(app: Application) {
-    val database = LembarDatabase.create(app)
-    val media = MediaStorage(app)
-    val cipher = EntryCipher()
-    val journal = JournalRepository(database, cipher, media)
-    val backup = BackupManager(app, database, cipher, media)
+    // Lazy: nothing heavy (Keystore, Room) runs before the first screen needs it.
+    val database by lazy { LembarDatabase.create(app) }
+    val media by lazy { MediaStorage(app) }
+    val cipher by lazy { EntryCipher() }
+    val journal by lazy { JournalRepository(database, cipher, media) }
+    val backup by lazy { BackupManager(app, database, cipher, media) }
     val settings = SettingsRepository(app)
     val reminders = ReminderScheduler(app)
     val session = SessionLock()

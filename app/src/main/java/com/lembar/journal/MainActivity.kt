@@ -23,7 +23,10 @@ import com.lembar.journal.ui.AppNav
 import com.lembar.journal.ui.AppViewModel
 import com.lembar.journal.ui.LocalAuthenticator
 import com.lembar.journal.ui.LockScreen
-import com.lembar.journal.ui.lembarViewModel
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.lembar.journal.ui.theme.LembarTheme
 import com.lembar.journal.ui.theme.Lembar
 import com.lembar.journal.ui.theme.isNight
@@ -36,13 +39,19 @@ class MainActivity : FragmentActivity() {
     private val container get() = (application as LembarApp).container
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splash = installSplashScreen()
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) handleIntent(intent)
         val authenticator = Authenticator(this, container.session)
+        val appVm = ViewModelProvider(
+            this,
+            viewModelFactory { initializer { AppViewModel(container) } },
+        )[AppViewModel::class.java]
+        // Keep the splash until settings are read, so there's no blank frame or onboarding flash.
+        splash.setKeepOnScreenCondition { appVm.settings.value == null }
 
         setContent {
-            val appVm = lembarViewModel { c, _ -> AppViewModel(c) }
             val settings by appVm.settings.collectAsStateWithLifecycle()
             val unlocked by container.session.unlocked.collectAsStateWithLifecycle()
 

@@ -34,6 +34,8 @@ data class EntryEntity(
     @ColumnInfo(defaultValue = "") val ink: String = "",
     /** Paragraph alignment key (BodyAlign). Added in DB v2. */
     @ColumnInfo(defaultValue = "start") val align: String = "start",
+    /** EntryType key: journal, idea, story, pantun, poem. Added in DB v3. */
+    @ColumnInfo(defaultValue = "journal") val type: String = "journal",
 )
 
 @Entity(

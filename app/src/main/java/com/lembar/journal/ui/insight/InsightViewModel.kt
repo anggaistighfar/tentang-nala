@@ -24,6 +24,9 @@ fun JournalEntry.toInsight(textOverride: String? = null) = InsightEntry(
     emotions = emotions,
     text = textOverride ?: if (locked) "" else "$title\n$body",
     locked = locked,
+    type = type,
+    title = if (locked) "" else title,
+    body = textOverride ?: if (locked) "" else body,
 )
 
 class InsightViewModel(private val c: AppContainer) : ViewModel() {

@@ -65,6 +65,7 @@ import com.lembar.journal.ui.components.SecondaryButton
 import com.lembar.journal.ui.components.SurfaceCard
 import com.lembar.journal.ui.components.Tag
 import com.lembar.journal.ui.components.TopBar
+import com.lembar.journal.ui.icon
 import com.lembar.journal.ui.lembarViewModel
 import com.lembar.journal.ui.theme.Lembar
 import com.lembar.journal.ui.theme.MoodPalette
@@ -216,6 +217,29 @@ fun InsightScreen(onBack: () -> Unit, onPrompt: (String) -> Unit) {
                             Spacer(Modifier.height(10.dp))
                             Text("Coba tanyakan: ${d.distortion.reframe}", style = t.body)
                         }
+                    }
+                }
+            }
+
+            if (r.creative.isNotEmpty()) {
+                Spacer(Modifier.height(24.dp))
+                Section("Karya kreatifmu", "Ide, cerita, pantun, dan puisi dalam ${r.days} hari terakhir")
+                SurfaceCard(Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        r.creative.forEach { st ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(c.surfaceAlt), contentAlignment = Alignment.Center) {
+                                    Icon(st.type.icon(), null, tint = c.ink, modifier = Modifier.size(19.dp))
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Text("${st.count} ${st.type.noun}", style = t.label, modifier = Modifier.weight(1f))
+                                if (st.avgScore != null) Text("rata-rata nilai ${st.avgScore}", style = t.caption)
+                            }
+                        }
+                        Text(
+                            "Menulis kreatif adalah cara sehat menyalurkan perasaan. Buka tiap karya untuk melihat penilaian lengkapnya.",
+                            style = t.caption,
+                        )
                     }
                 }
             }

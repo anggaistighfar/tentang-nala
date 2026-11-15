@@ -21,8 +21,8 @@ android {
         applicationId = "com.tentangnala.journal"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.3.0"
+        versionCode = 5
+        versionName = "1.4.0"
     }
 
     signingConfigs {
@@ -94,4 +94,6 @@ dependencies {
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.exifinterface)
     implementation(libs.coil.compose)
+    implementation(libs.androidx.core.splashscreen)
+    testImplementation(libs.junit)
 }

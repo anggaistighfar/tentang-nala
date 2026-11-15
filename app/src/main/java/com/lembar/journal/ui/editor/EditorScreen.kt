@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material.icons.automirrored.outlined.FormatAlignLeft
@@ -33,6 +34,9 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import com.lembar.journal.domain.Markup
+import com.lembar.journal.domain.EntryType
+import androidx.compose.runtime.rememberUpdatedState
+import com.lembar.journal.ui.components.SecondaryButton
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -388,6 +392,8 @@ private fun WriteStep(s: EditorState, vm: EditorViewModel, stylusOnly: Boolean, 
         }
 
         Column(Modifier.weight(1f).verticalScroll(scroll).padding(horizontal = 22.dp)) {
+            TypeChips(s.type, vm::setType)
+            Spacer(Modifier.height(10.dp))
             // Mood + emotions summary; tap to revisit the check-in.
             Row(
                 Modifier
@@ -398,7 +404,10 @@ private fun WriteStep(s: EditorState, vm: EditorViewModel, stylusOnly: Boolean, 
             ) {
                 MoodFace(s.mood, 28.dp)
                 Spacer(Modifier.width(10.dp))
-                Text(s.mood?.label ?: "Pilih mood", style = t.label.copy(color = if (s.mood == null) c.inkMuted else c.ink))
+                Text(
+                    s.mood?.label ?: if (s.type.creative) "Tambah mood (opsional)" else "Pilih mood",
+                    style = t.label.copy(color = if (s.mood == null) c.inkMuted else c.ink),
+                )
             }
             if (s.emotions.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))
@@ -416,13 +425,31 @@ private fun WriteStep(s: EditorState, vm: EditorViewModel, stylusOnly: Boolean, 
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next),
                 modifier = Modifier.fillMaxWidth(),
                 decorationBox = { inner ->
-                    if (s.title.isEmpty()) Text("Judul (opsional)", style = font.titleStyle(c.inkFaint))
+                    if (s.title.isEmpty()) {
+                        Text(
+                            when (s.type) {
+                                EntryType.Story -> "Judul cerita"
+                                EntryType.Idea -> "Nama idemu"
+                                EntryType.Poem -> "Judul puisi"
+                                else -> "Judul (opsional)"
+                            },
+                            style = font.titleStyle(c.inkFaint),
+                        )
+                    }
                     inner()
                 },
             )
             Spacer(Modifier.height(12.dp))
             BodyPage(s, vm, stylusOnly, font, scroll)
-            if (s.body.isEmpty() && s.ink.isEmpty() && !s.penMode) {
+            s.liveHint?.let { hint ->
+                Spacer(Modifier.height(6.dp))
+                Text(hint, style = t.caption.copy(color = c.accent), modifier = Modifier.padding(vertical = 2.dp))
+            }
+            if (s.type.outline != null && s.body.isBlank()) {
+                Spacer(Modifier.height(6.dp))
+                SecondaryButton("Pakai kerangka ${s.type.noun}", vm::insertOutline, icon = Icons.AutoMirrored.Outlined.FormatListBulleted)
+            }
+            if (!s.type.creative && s.body.isEmpty() && s.ink.isEmpty() && !s.penMode) {
                 Row(
                     Modifier.clip(RoundedCornerShape(8.dp)).clickable { vm.nextPrompt() }.padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -445,6 +472,8 @@ private fun WriteStep(s: EditorState, vm: EditorViewModel, stylusOnly: Boolean, 
             PenBar(
                 pen = s.pen,
                 onChange = vm::setPen,
+                penInk = s.penInk,
+                onPenInk = vm::setPenInk,
                 canUndo = s.canUndoInk,
                 canRedo = s.canRedoInk,
                 onUndo = vm::undoInk,
@@ -474,7 +503,7 @@ private fun WriteStep(s: EditorState, vm: EditorViewModel, stylusOnly: Boolean, 
             })
             IconAction(Icons.Outlined.Palette, "Sketsa terpisah", { showSketch = true })
             IconAction(
-                Icons.Outlined.Draw, if (s.penMode) "Kembali mengetik" else "Tulis dengan S Pen",
+                Icons.Outlined.Draw, if (s.penMode) "Tutup alat S Pen" else "Alat S Pen",
                 {
                     if (!s.penMode) focus.clearFocus()
                     vm.setPenMode(!s.penMode)
@@ -642,9 +671,12 @@ private fun RewardDialog(reward: Reward, onDismiss: () -> Unit) {
 }
 
 /**
- * The writing page: formatted text with a handwriting layer on top.
- * While typing, the page scrolls itself so the cursor stays just above the
- * keyboard, including after Enter adds a new line.
+ * The writing page: formatted text with an ink layer on top.
+ *
+ * In "Tinta" mode the S Pen always writes ink anywhere on the page, over text too
+ * (strike a word, underline, sign, doodle), without switching modes; a finger keeps
+ * typing and scrolling. In "Jadi teks" mode the S Pen is handed to the keyboard's
+ * handwriting recognition instead. While typing, the page follows the cursor.
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -663,6 +695,8 @@ private fun BodyPage(
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     var focused by remember { mutableStateOf(false) }
     var pageWidth by remember { mutableIntStateOf(0) }
+    val session = rememberInkSession()
+    val screenH = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
 
     // Follow the cursor while typing.
     val field = vm.bodyField
@@ -678,15 +712,32 @@ private fun BodyPage(
         bringer.bringIntoView(Rect(r.left, r.top - above, r.right + 1f, r.bottom + below))
     }
 
-    val inkBottom = (s.ink.maxOfOrNull { it.bottom } ?: 0f) * pageWidth
-    val extra = if (s.penMode) 420.dp else 32.dp
-    val minHeight = maxOf(with(density) { inkBottom.toDp() } + extra, 240.dp)
+    // The page is at least most of a screen tall and keeps growing below the lowest ink.
+    val inkBottom = with(density) { ((s.ink.maxOfOrNull { it.bottom } ?: 0f) * pageWidth).toDp() }
+    val inkRoom = if (s.penInk) 280.dp else 32.dp
+    val minHeight = maxOf(inkBottom + inkRoom, if (s.penInk) screenH * 0.55f else 240.dp)
+    val penState = rememberUpdatedState(s.pen)
+    val inkState = rememberUpdatedState(s.ink)
 
     Box(
         Modifier
             .fillMaxWidth()
             .heightIn(min = minHeight)
-            .onSizeChanged { pageWidth = it.width },
+            .onSizeChanged { pageWidth = it.width }
+            // While writing with the S Pen, a stroke that starts at the screen edge
+            // must not be taken as the system "back" swipe.
+            .then(if (s.penMode && s.penInk) Modifier.systemGestureExclusion() else Modifier)
+            .inkInput(
+                session = session,
+                capturePen = s.penInk,
+                fingerDraws = s.penMode && !stylusOnly,
+                pen = { penState.value },
+                strokes = { inkState.value },
+                onStart = { if (!s.penMode) vm.setPenMode(true) },
+                onStroke = vm::addStroke,
+                onErase = vm::eraseStrokes,
+                onPan = { dy -> scroll.dispatchRawDelta(-dy) },
+            ),
     ) {
         BasicTextField(
             value = vm.bodyField,
@@ -704,7 +755,7 @@ private fun BodyPage(
             decorationBox = { inner ->
                 if (s.body.isEmpty() && s.ink.isEmpty()) {
                     Text(
-                        if (s.penMode) "Tulis langsung di sini dengan S Pen." else s.prompt,
+                        s.prompt,
                         style = baseStyle.copy(color = c.inkFaint, textAlign = s.align.align),
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -712,23 +763,42 @@ private fun BodyPage(
                 inner()
             },
         )
-        InkCanvas(
-            strokes = s.ink,
-            editable = s.penMode,
-            pen = s.pen,
-            fingerDraws = !stylusOnly,
-            onStroke = vm::addStroke,
-            onErase = vm::eraseStrokes,
-            modifier = Modifier.matchParentSize(),
-        )
+        InkCanvas(s.ink, session, Modifier.matchParentSize())
     }
     if (s.penMode) {
         Text(
-            if (stylusOnly) "S Pen menulis, jari menggeser halaman. Tahan tombol S Pen untuk menghapus."
-            else "Jari dan S Pen sama-sama menulis. Atur di Pengaturan → S Pen.",
+            when {
+                !s.penInk -> "Mode Jadi teks: tulisan S Pen diubah keyboard menjadi teks."
+                stylusOnly -> "S Pen menulis di mana saja, juga di atas teks. Jari mengetik dan menggeser. Tahan tombol S Pen untuk menghapus."
+                else -> "Jari dan S Pen sama-sama menulis. Pakai alat Geser untuk menggulir. Atur di Pengaturan → S Pen."
+            },
             style = Lembar.type.caption,
             modifier = Modifier.padding(top = 6.dp),
         )
+    }
+}
+
+/** Kind of writing: journal, idea, story, pantun, poem. */
+@Composable
+private fun TypeChips(selected: EntryType, onSelect: (EntryType) -> Unit) {
+    val c = Lembar.colors
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        EntryType.entries.forEach { t ->
+            val active = t == selected
+            Text(
+                t.label,
+                style = Lembar.type.caption.copy(color = if (active) c.background else c.ink, fontWeight = FontWeight.SemiBold),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (active) c.ink else Color.Transparent)
+                    .border(1.dp, if (active) c.ink else c.border, RoundedCornerShape(8.dp))
+                    .clickable { onSelect(t) }
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+            )
+        }
     }
 }
 

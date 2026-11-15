@@ -82,6 +82,7 @@ class AppViewModel(private val c: AppContainer) : ViewModel() {
     fun setAppLock(v: Boolean) = viewModelScope.launch { c.settings.setAppLock(v) }
     fun setPhotoQuality(v: PhotoQuality) = viewModelScope.launch { c.settings.setPhotoQuality(v) }
     fun setStylusOnly(v: Boolean) = viewModelScope.launch { c.settings.setStylusOnly(v) }
+    fun setPenInk(v: Boolean) = viewModelScope.launch { c.settings.setPenInk(v) }
 
     fun setReminder(enabled: Boolean, hour: Int, minute: Int) = viewModelScope.launch {
         c.settings.setReminder(enabled, hour, minute)

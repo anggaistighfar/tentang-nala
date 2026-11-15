@@ -7,6 +7,7 @@ import com.lembar.journal.data.db.EntryWithAttachments
 import com.lembar.journal.data.db.LembarDatabase
 import com.lembar.journal.domain.EntryFacts
 import com.lembar.journal.domain.Emotions
+import com.lembar.journal.domain.EntryType
 import com.lembar.journal.domain.Markup
 import com.lembar.journal.domain.Mood
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +55,7 @@ data class JournalEntry(
     val align: String = "start",
     /** True when the page has handwriting. The strokes themselves come from [JournalRepository.readContent]. */
     val hasInk: Boolean = false,
+    val type: EntryType = EntryType.Journal,
 ) {
     fun facts() = EntryFacts(
         epochDay = date.toEpochDay(),
@@ -83,6 +85,7 @@ data class EntryDraft(
     val media: List<DraftMedia>,
     val ink: String = "",
     val align: String = "start",
+    val type: EntryType = EntryType.Journal,
 )
 
 /** Readable content of an entry (decrypted for locked entries). */
@@ -139,6 +142,7 @@ class JournalRepository(
                         wordCount = words,
                         ink = ink,
                         align = draft.align,
+                        type = draft.type.key,
                     ),
                 )
             } else {
@@ -154,6 +158,7 @@ class JournalRepository(
                         wordCount = words,
                         ink = ink,
                         align = draft.align,
+                        type = draft.type.key,
                     ),
                 )
                 existing.entry.id
@@ -228,6 +233,7 @@ class JournalRepository(
         },
         align = entry.align,
         hasInk = entry.ink.isNotEmpty(),
+        type = EntryType.of(entry.type),
     )
 
     companion object {

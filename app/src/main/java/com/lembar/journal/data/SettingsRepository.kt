@@ -35,6 +35,8 @@ data class Settings(
     val stylusOnly: Boolean = true,
     /** 0 = never backed up. */
     val lastBackupAt: Long = 0L,
+    /** S Pen on the page: true = ink (scribble, sign, strike through), false = handwriting becomes text. */
+    val penInk: Boolean = true,
 )
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -53,6 +55,7 @@ class SettingsRepository(private val context: Context) {
         val photoQuality = stringPreferencesKey("photo_quality")
         val stylusOnly = booleanPreferencesKey("stylus_only")
         val lastBackup = longPreferencesKey("last_backup_at")
+        val penInk = booleanPreferencesKey("pen_ink")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { it.toSettings() }
@@ -71,6 +74,7 @@ class SettingsRepository(private val context: Context) {
         photoQuality = PhotoQuality.fromKey(this[Keys.photoQuality]),
         stylusOnly = this[Keys.stylusOnly] ?: true,
         lastBackupAt = this[Keys.lastBackup] ?: 0L,
+        penInk = this[Keys.penInk] ?: true,
     )
 
     suspend fun completeOnboarding(name: String, hour: Int, minute: Int, reminder: Boolean) {
@@ -94,5 +98,6 @@ class SettingsRepository(private val context: Context) {
     suspend fun setAppLock(value: Boolean) = context.dataStore.edit { it[Keys.appLock] = value }
     suspend fun setPhotoQuality(value: PhotoQuality) = context.dataStore.edit { it[Keys.photoQuality] = value.key }
     suspend fun setStylusOnly(value: Boolean) = context.dataStore.edit { it[Keys.stylusOnly] = value }
+    suspend fun setPenInk(value: Boolean) = context.dataStore.edit { it[Keys.penInk] = value }
     suspend fun setLastBackup(value: Long) = context.dataStore.edit { it[Keys.lastBackup] = value }
 }

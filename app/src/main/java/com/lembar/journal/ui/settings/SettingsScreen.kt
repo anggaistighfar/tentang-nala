@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Draw
 import androidx.compose.material.icons.outlined.Fingerprint
+import androidx.compose.material.icons.outlined.Gesture
 import androidx.compose.material.icons.outlined.HighQuality
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Notifications
@@ -184,8 +185,14 @@ fun SettingsScreen(vm: AppViewModel, settings: Settings, contentPadding: Padding
         }
         Group("S Pen") {
             SettingRow(
+                Icons.Outlined.Gesture, "S Pen menulis sebagai tinta",
+                if (settings.penInk) "Coret, garis bawahi, tanda tangan di mana saja di halaman. Tulisan tetap tulisan tangan."
+                else "Mati: tulisan S Pen diubah keyboard menjadi teks.",
+                trailing = { LembarSwitch(settings.penInk) { vm.setPenInk(it) } },
+            )
+            SettingRow(
                 Icons.Outlined.Draw, "Abaikan jari saat pakai S Pen",
-                "Telapak tangan tidak ikut menggambar di sketsa",
+                "Jari tetap mengetik dan menggeser halaman, telapak tangan tidak ikut mencoret",
                 trailing = { LembarSwitch(settings.stylusOnly) { vm.setStylusOnly(it) } },
             )
         }

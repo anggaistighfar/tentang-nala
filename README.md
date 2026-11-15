@@ -23,7 +23,8 @@ Atau buka halaman [Releases](https://github.com/anggaistighfar/tentang-nala/rele
 |---|---|
 | Catatan bebas | Judul + isi, pancingan menulis sesuai mood, hitungan kata; halaman ikut turun otomatis saat mengetik |
 | Format teks | Judul, subjudul, daftar bernomor dan daftar poin (tombol atau ketik `1. ` / `- `; Enter melanjutkan, Enter di baris kosong mengakhiri), rata kiri/tengah/kanan/kiri-kanan, tombol **Rapikan** |
-| Tulis langsung dengan S Pen | Mode pena: tulis tangan langsung di halaman jurnal seperti Samsung Notes; jari tetap menggeser halaman |
+| Tulis langsung dengan S Pen | S Pen langsung menjadi tinta di mana saja di halaman, juga di atas teks: coret kata, garis bawahi, beri tanda tangan, gambar. Jari tetap mengetik dan menggeser. Alat Geser membuat S Pen bisa menggulir halaman. Bisa diganti ke mode **Jadi teks** (tulisan S Pen diubah keyboard menjadi teks) |
+| Jenis tulisan | Jurnal, Ide, Cerita, Pantun, Puisi. Pilih dari tombol **+**; Ide dan Cerita punya kerangka siap pakai; Pantun dan Puisi menampilkan jumlah baris, suku kata, dan pola rima saat mengetik |
 | Mood | 5 wajah mood + pilihan emosi (bisa tambah sendiri) |
 | Pengingat harian | Jam bebas; tidak muncul kalau kamu sudah menulis hari itu |
 | Foto & sketsa | Kamera, galeri, atau gambar dengan S Pen |
@@ -47,7 +48,15 @@ Halaman **Analisis Nala** (dari Beranda atau Statistik) membaca jurnal 7, 30, at
 - **Yang bisa kamu lakukan**: latihan langkah demi langkah sesuai polamu (catatan pikiran, grounding, aktivasi perilaku, welas asih diri, kebiasaan tidur, menghubungi orang lain, waktu khawatir, tiga hal baik). Tombol "Coba tulis sekarang" membuka jurnal dengan panduan latihannya.
 - **Ringkasan untuk psikolog**: angka mood, emosi, topik, dan pola dalam bentuk teks yang bisa dibagikan ke psikolog atau konselor. Isi tulisan jurnal tidak ikut dibagikan.
 
-Setiap catatan juga mendapat **Catatan dari Nala**: tanggapan singkat dan satu saran.
+Setiap jurnal juga mendapat **Catatan dari Nala**: tanggapan singkat dan satu saran.
+
+**Penilaian Nala** untuk karya kreatif (nilai 0–100 plus catatan psikologis dan saran):
+
+- **Pantun**: jumlah baris (4 per bait), suku kata per baris (8–12), rima a-b-a-b, sampiran & isi.
+- **Cerita**: panjang, judul, panjang kalimat, alur rasa (awal–tengah–akhir), dialog, ragam kata.
+- **Ide**: apakah sudah ada masalah/tujuan, untuk siapa, langkah pertama, sumber daya, dan kendala.
+- **Puisi** (tanpa nilai, karena puisi bebas): bait & baris, pola rima, pengulangan, ragam kata, citraan.
+- Tema dan pola pikir di Analisis Nala hanya diambil dari jurnal dan ide, karena cerita dan puisi bisa fiksi. Deteksi krisis tetap berlaku untuk semua jenis.
 
 **Keselamatan.** Kalau tulisan menyebut keinginan untuk mati atau menyakiti diri, aplikasi tidak menampilkan pop-up XP. Yang muncul adalah kartu bantuan dengan **Healing119 Kemenkes (telepon 119, ekstensi 8, gratis)** dan chat di **healing119.id**. Kalau mood rendah bertahan sekitar dua minggu, aplikasi menyarankan bicara dengan psikolog.
 
